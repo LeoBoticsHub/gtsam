@@ -35,7 +35,7 @@ mkdir build
 cd build
 cmake ..
 make check (optional, runs unit tests)
-make install
+sudo make install
 ```
 
 Prerequisites:
