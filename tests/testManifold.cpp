@@ -18,13 +18,14 @@
  */
 
 #include <gtsam/base/Manifold.h>
-#include <gtsam/geometry/PinholeCamera.h>
-#include <gtsam/geometry/Pose2.h>
-#include <gtsam/geometry/Cal3_S2.h>
-#include <gtsam/geometry/Cal3Bundler.h>
+#include <gtsam/base/Testable.h>
+#include <gtsam/base/VectorConstants.h>
 #include <gtsam/base/VectorSpace.h>
 #include <gtsam/base/testLie.h>
-#include <gtsam/base/Testable.h>
+#include <gtsam/geometry/Cal3Bundler.h>
+#include <gtsam/geometry/Cal3_S2.h>
+#include <gtsam/geometry/PinholeCamera.h>
+#include <gtsam/geometry/Pose2.h>
 
 #undef CHECK
 #include <CppUnitLite/TestHarness.h>
@@ -37,27 +38,27 @@ typedef PinholeCamera<Cal3Bundler> Camera;
 
 //******************************************************************************
 TEST(Manifold, SomeManifoldsGTSAM) {
-  //BOOST_CONCEPT_ASSERT((IsManifold<int>)); // integer is not a manifold
-  BOOST_CONCEPT_ASSERT((IsManifold<Camera>));
-  BOOST_CONCEPT_ASSERT((IsManifold<Cal3_S2>));
-  BOOST_CONCEPT_ASSERT((IsManifold<Cal3Bundler>));
-  BOOST_CONCEPT_ASSERT((IsManifold<Camera>));
+  //GTSAM_CONCEPT_ASSERT(IsManifold<int>); // integer is not a manifold
+  GTSAM_CONCEPT_ASSERT(IsManifold<Camera>);
+  GTSAM_CONCEPT_ASSERT(IsManifold<Cal3_S2>);
+  GTSAM_CONCEPT_ASSERT(IsManifold<Cal3Bundler>);
+  GTSAM_CONCEPT_ASSERT(IsManifold<Camera>);
 }
 
 //******************************************************************************
 TEST(Manifold, SomeLieGroupsGTSAM) {
-  BOOST_CONCEPT_ASSERT((IsLieGroup<Rot2>));
-  BOOST_CONCEPT_ASSERT((IsLieGroup<Pose2>));
-  BOOST_CONCEPT_ASSERT((IsLieGroup<Rot3>));
-  BOOST_CONCEPT_ASSERT((IsLieGroup<Pose3>));
+  GTSAM_CONCEPT_ASSERT(IsLieGroup<Rot2>);
+  GTSAM_CONCEPT_ASSERT(IsLieGroup<Pose2>);
+  GTSAM_CONCEPT_ASSERT(IsLieGroup<Rot3>);
+  GTSAM_CONCEPT_ASSERT(IsLieGroup<Pose3>);
 }
 
 //******************************************************************************
 TEST(Manifold, SomeVectorSpacesGTSAM) {
-  BOOST_CONCEPT_ASSERT((IsVectorSpace<double>));
-  BOOST_CONCEPT_ASSERT((IsVectorSpace<float>));
-  BOOST_CONCEPT_ASSERT((IsVectorSpace<Point2>));
-  BOOST_CONCEPT_ASSERT((IsVectorSpace<Matrix24>));
+  GTSAM_CONCEPT_ASSERT(IsVectorSpace<double>);
+  GTSAM_CONCEPT_ASSERT(IsVectorSpace<float>);
+  GTSAM_CONCEPT_ASSERT(IsVectorSpace<Point2>);
+  GTSAM_CONCEPT_ASSERT(IsVectorSpace<Matrix24>);
 }
 
 //******************************************************************************

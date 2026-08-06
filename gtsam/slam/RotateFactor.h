@@ -8,6 +8,7 @@
 #pragma once
 
 #include <gtsam/nonlinear/NonlinearFactor.h>
+#include <gtsam/nonlinear/NoiseModelFactorN.h>
 #include <gtsam/geometry/Rot3.h>
 
 namespace gtsam {
@@ -29,6 +30,9 @@ class RotateFactor: public NoiseModelFactorN<Rot3> {
 
 public:
 
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
+
   /// Constructor
   RotateFactor(Key key, const Rot3& P, const Rot3& Z,
       const SharedNoiseModel& model) :
@@ -37,7 +41,7 @@ public:
 
   /// @return a deep copy of this factor
   gtsam::NonlinearFactor::shared_ptr clone() const override {
-    return boost::static_pointer_cast<gtsam::NonlinearFactor>(
+    return std::static_pointer_cast<gtsam::NonlinearFactor>(
         gtsam::NonlinearFactor::shared_ptr(new This(*this))); }
 
   /// print
@@ -50,8 +54,7 @@ public:
   }
 
   /// vector of errors returns 2D vector
-  Vector evaluateError(const Rot3& R,
-      boost::optional<Matrix&> H = boost::none) const override {
+  Vector evaluateError(const Rot3& R, OptionalMatrixType H) const override {
     // predict p_ as q = R*z_, derivative H will be filled if not none
     Point3 q = R.rotate(z_,H);
     // error is just difference, and note derivative of that wrpt q is I3
@@ -73,6 +76,9 @@ class RotateDirectionsFactor: public NoiseModelFactorN<Rot3> {
 
 public:
 
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
+
   /// Constructor
   RotateDirectionsFactor(Key key, const Unit3& i_p, const Unit3& c_z,
       const SharedNoiseModel& model) :
@@ -89,7 +95,7 @@ public:
 
   /// @return a deep copy of this factor
   gtsam::NonlinearFactor::shared_ptr clone() const override {
-    return boost::static_pointer_cast<gtsam::NonlinearFactor>(
+    return std::static_pointer_cast<gtsam::NonlinearFactor>(
         gtsam::NonlinearFactor::shared_ptr(new This(*this))); }
 
   /// print
@@ -102,9 +108,9 @@ public:
   }
 
   /// vector of errors returns 2D vector
-  Vector evaluateError(const Rot3& iRc, boost::optional<Matrix&> H = boost::none) const override {
+  Vector evaluateError(const Rot3& iRc, OptionalMatrixType H) const override {
     Unit3 i_q = iRc * c_z_;
-    Vector error = i_p_.error(i_q, H);
+    Vector error = i_p_.errorVector(i_q, {}, H);
     if (H) {
       Matrix DR;
       iRc.rotate(c_z_, DR);
@@ -112,8 +118,6 @@ public:
     }
     return error;
   }
-
-  GTSAM_MAKE_ALIGNED_OPERATOR_NEW
 };
 }  // namespace gtsam
 

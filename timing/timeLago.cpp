@@ -33,18 +33,16 @@ int main(int argc, char *argv[]) {
   size_t trials = 1;
 
   // read graph
-  Values::shared_ptr solution;
-  NonlinearFactorGraph::shared_ptr g;
   string inputFile = findExampleDataFile("w10000");
   auto model = noiseModel::Diagonal::Sigmas((Vector(3) << 0.05, 0.05, 5.0 * M_PI / 180.0).finished());
-  boost::tie(g, solution) = load2D(inputFile, model);
+  const auto [g, solution] = load2D(inputFile, model);
 
   // add noise to create initial estimate
   Values initial;
   auto noise = noiseModel::Diagonal::Sigmas((Vector(3) << 0.5, 0.5, 15.0 * M_PI / 180.0).finished());
   Sampler sampler(noise);
   for(const auto& [key,pose]: solution->extract<Pose2>())
-    initial.insert(key, pose.retract(sampler.sample()));
+    initial.insert(key, sampler.perturb(pose));
 
   // Add prior on the pose having index (key) = 0
   noiseModel::Diagonal::shared_ptr priorModel = //

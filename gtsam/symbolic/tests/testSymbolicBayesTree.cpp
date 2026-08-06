@@ -20,19 +20,36 @@
 #include <gtsam/inference/Symbol.h>
 #include <gtsam/symbolic/SymbolicBayesNet.h>
 #include <gtsam/symbolic/SymbolicBayesTree.h>
+#include <gtsam/symbolic/IndexedJunctionTree.h>
 #include <gtsam/symbolic/tests/symbolicExampleGraphs.h>
-
-#include <boost/range/adaptor/indirected.hpp>
-using boost::adaptors::indirected;
 
 #include <CppUnitLite/TestHarness.h>
 #include <gtsam/base/TestableAssertions.h>
+#include <type_traits>
 
 using namespace std;
 using namespace gtsam;
 using namespace gtsam::symbol_shorthand;
 
 static bool debug = false;
+
+// Given a vector of shared pointers infer the type of the pointed-to objects
+template<typename T>
+using PointedToType = std::decay_t<decltype(**declval<T>().begin())>;
+
+// Given a vector of shared pointers infer the type of the pointed-to objects
+template<typename T>
+using ValuesVector = std::vector<PointedToType<T>>;
+
+// Return a vector of dereferenced values
+template<typename T>
+ValuesVector<T> deref(const T& v) {
+  ValuesVector<T> result;
+  for (auto& t : v)
+    result.push_back(*t);
+  return result;
+}
+
 
 /* ************************************************************************* */
 TEST(SymbolicBayesTree, clear) {
@@ -79,6 +96,17 @@ TEST(SymbolicBayesTree, clique_structure) {
   SymbolicBayesTree actual = *graph.eliminateMultifrontal(order);
 
   EXPECT(assert_equal(expected, actual));
+
+  // Reuse an indexed junction tree built from the same graph and ordering.
+  IndexedJunctionTree indexedJunctionTree = graph.buildIndexedJunctionTree(order);
+
+  SymbolicBayesTree actualReuse1 =
+      *graph.eliminateMultifrontal(indexedJunctionTree);
+  SymbolicBayesTree actualReuse2 =
+      *graph.eliminateMultifrontal(indexedJunctionTree);
+
+  EXPECT(assert_equal(expected, actualReuse1));
+  EXPECT(assert_equal(expected, actualReuse2));
 }
 
 /* ************************************************************************* *
@@ -111,8 +139,7 @@ TEST(BayesTree, removePath) {
   bayesTree.removePath(bayesTree[_C_], &bn, &orphans);
   SymbolicFactorGraph factors(bn);
   CHECK(assert_equal(expected, factors));
-  CHECK(assert_container_equal(expectedOrphans | indirected,
-                               orphans | indirected));
+  CHECK(assert_container_equal(deref(expectedOrphans), deref(orphans)));
 
   bayesTree = bayesTreeOrig;
 
@@ -127,8 +154,7 @@ TEST(BayesTree, removePath) {
   bayesTree.removePath(bayesTree[_E_], &bn2, &orphans2);
   SymbolicFactorGraph factors2(bn2);
   CHECK(assert_equal(expected2, factors2));
-  CHECK(assert_container_equal(expectedOrphans2 | indirected,
-                               orphans2 | indirected));
+  CHECK(assert_container_equal(deref(expectedOrphans2), deref(orphans2)));
 }
 
 /* ************************************************************************* */
@@ -147,8 +173,7 @@ TEST(BayesTree, removePath2) {
   CHECK(assert_equal(expected, factors));
   SymbolicBayesTree::Cliques expectedOrphans{bayesTree[_S_], bayesTree[_T_],
                                              bayesTree[_X_]};
-  CHECK(assert_container_equal(expectedOrphans | indirected,
-                               orphans | indirected));
+  CHECK(assert_container_equal(deref(expectedOrphans), deref(orphans)));
 }
 
 /* ************************************************************************* */
@@ -167,8 +192,7 @@ TEST(BayesTree, removePath3) {
   expected.emplace_shared<SymbolicFactor>(_T_, _E_, _L_);
   CHECK(assert_equal(expected, factors));
   SymbolicBayesTree::Cliques expectedOrphans{bayesTree[_S_], bayesTree[_X_]};
-  CHECK(assert_container_equal(expectedOrphans | indirected,
-                               orphans | indirected));
+  CHECK(assert_container_equal(deref(expectedOrphans), deref(orphans)));
 }
 
 void getAllCliques(const SymbolicBayesTree::sharedClique& subtree,
@@ -213,7 +237,7 @@ TEST(BayesTree, shortcutCheck) {
   // Check if all the cached shortcuts are cleared
   rootClique->deleteCachedShortcuts();
   for (SymbolicBayesTree::sharedClique& clique : allCliques) {
-    bool notCleared = clique->cachedSeparatorMarginal().is_initialized();
+    bool notCleared = clique->cachedSeparatorMarginal().has_value();
     CHECK(notCleared == false);
   }
   EXPECT_LONGS_EQUAL(0, (long)rootClique->numCachedSeparatorMarginals());
@@ -235,7 +259,7 @@ TEST(BayesTree, removeTop) {
   SymbolicBayesTree bayesTree = asiaBayesTree;
 
   // create a new factor to be inserted
-  // boost::shared_ptr<IndexFactor> newFactor(new IndexFactor(_S_,_B_));
+  // std::shared_ptr<IndexFactor> newFactor(new IndexFactor(_S_,_B_));
 
   // Remove the contaminated part of the Bayes tree
   SymbolicBayesNet bn;
@@ -244,16 +268,15 @@ TEST(BayesTree, removeTop) {
 
   // Check expected outcome
   SymbolicBayesNet expected;
-  expected += SymbolicConditional::FromKeys<KeyVector>(Keys(_E_)(_L_)(_B_), 3);
-  expected += SymbolicConditional::FromKeys<KeyVector>(Keys(_S_)(_B_)(_L_), 1);
+  expected.add(SymbolicConditional::FromKeys<KeyVector>(Keys(_E_)(_L_)(_B_), 3));
+  expected.add(SymbolicConditional::FromKeys<KeyVector>(Keys(_S_)(_B_)(_L_), 1));
   CHECK(assert_equal(expected, bn));
 
   SymbolicBayesTree::Cliques expectedOrphans{bayesTree[_T_], bayesTree[_X_]};
-  CHECK(assert_container_equal(expectedOrphans | indirected,
-                               orphans | indirected));
+  CHECK(assert_container_equal(deref(expectedOrphans), deref(orphans)));
 
   // Try removeTop again with a factor that should not change a thing
-  // boost::shared_ptr<IndexFactor> newFactor2(new IndexFactor(_B_));
+  // std::shared_ptr<IndexFactor> newFactor2(new IndexFactor(_B_));
   SymbolicBayesNet bn2;
   SymbolicBayesTree::Cliques orphans2;
   bayesTree.removeTop(Keys(_B_), &bn2, &orphans2);
@@ -261,8 +284,7 @@ TEST(BayesTree, removeTop) {
   SymbolicFactorGraph expected2;
   CHECK(assert_equal(expected2, factors2));
   SymbolicBayesTree::Cliques expectedOrphans2;
-  CHECK(assert_container_equal(expectedOrphans2 | indirected,
-                               orphans2 | indirected));
+  CHECK(assert_container_equal(deref(expectedOrphans2), deref(orphans2)));
 }
 
 /* ************************************************************************* */
@@ -286,8 +308,7 @@ TEST(BayesTree, removeTop2) {
   CHECK(assert_equal(expected, bn));
 
   SymbolicBayesTree::Cliques expectedOrphans{bayesTree[_S_], bayesTree[_X_]};
-  CHECK(assert_container_equal(expectedOrphans | indirected,
-                               orphans | indirected));
+  CHECK(assert_container_equal(deref(expectedOrphans), deref(orphans)));
 }
 
 /* ************************************************************************* */
@@ -344,6 +365,39 @@ TEST(BayesTree, removeTop5) {
   SymbolicBayesNet expectedBn;
   EXPECT(assert_equal(expectedBn, bn));
   EXPECT(orphans.empty());
+}
+
+/* ************************************************************************* */
+TEST(BayesTree, collectAffectedKeys1) {
+  SymbolicBayesTree bayesTree = asiaBayesTree;
+
+  // Traverse Top
+  KeySet result = bayesTree.collectAffectedKeys(Keys(_T_));
+
+  // Remove top to get expected result
+  SymbolicBayesNet bn;
+  SymbolicBayesTree::Cliques orphans;
+  bayesTree.removeTop(Keys(_T_), &bn, &orphans);
+
+  CHECK(assert_container_equality(result, bn.keys()));
+}
+
+/* ************************************************************************* */
+TEST(BayesTree, collectAffectedKeys2) {
+  auto graph = SymbolicFactorGraph(SymbolicFactor(L(5)))(SymbolicFactor(
+      X(4), L(5)))(SymbolicFactor(X(2), X(4)))(SymbolicFactor(X(3), X(2)));
+  Ordering ordering{X(3), X(2), X(4), L(5)};
+  SymbolicBayesTree bayesTree = *graph.eliminateMultifrontal(ordering);
+
+  // Traverse Top
+  KeySet result = bayesTree.collectAffectedKeys(Keys(X(2))(L(5))(X(4))(X(3)));
+
+  // remove all
+  SymbolicBayesNet bn;
+  SymbolicBayesTree::Cliques orphans;
+  bayesTree.removeTop(Keys(X(2))(L(5))(X(4))(X(3)), &bn, &orphans);
+
+  CHECK(assert_container_equality(result, bn.keys()));
 }
 
 /* ************************************************************************* */
@@ -677,7 +731,7 @@ TEST(SymbolicBayesTree, COLAMDvsMETIS) {
   {
     Ordering ordering = Ordering::Create(Ordering::METIS, sfg);
 // Linux and Mac split differently when using Metis
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(__QNX__)
     EXPECT(assert_equal(Ordering{5, 4, 2, 1, 0, 3}, ordering));
 #elif defined(_WIN32)
     EXPECT(assert_equal(Ordering{4, 3, 1, 0, 5, 2}, ordering));
@@ -690,7 +744,7 @@ TEST(SymbolicBayesTree, COLAMDvsMETIS) {
     //  | | - P( 5 | 0 4)
     //  | - P( 2 | 1 3)
     SymbolicBayesTree expected;
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(__QNX__)
     expected.insertRoot(
         NodeClique(Keys(1)(0)(3), 3,
                    Children(                         //

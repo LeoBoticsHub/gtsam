@@ -15,8 +15,9 @@
  * @author Robert Truax
  */
 
-#include <gtsam/geometry/PinholeCamera.h>
+#include <gtsam/base/MatrixConstants.h>
 #include <gtsam/geometry/Cal3_S2.h>
+#include <gtsam/geometry/PinholeCamera.h>
 #include <gtsam/inference/Symbol.h>
 #include <gtsam/navigation/ImuBias.h>
 #include <gtsam/navigation/ImuFactor.h>
@@ -115,7 +116,7 @@ int main(int argc, char* argv[]) {
         Vector6 covvec;
         covvec << 0.1, 0.1, 0.1, 0.1, 0.1, 0.1;
         auto cov = noiseModel::Diagonal::Variances(covvec);
-        auto f = boost::make_shared<BetweenFactor<imuBias::ConstantBias> >(
+        auto f = std::make_shared<BetweenFactor<imuBias::ConstantBias> >(
             b1, b2, imuBias::ConstantBias(), cov);
         newgraph.add(f);
         initialEstimate.insert(biasKey, imuBias::ConstantBias());

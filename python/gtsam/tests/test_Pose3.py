@@ -13,67 +13,11 @@ import math
 import unittest
 
 import numpy as np
-
-import gtsam
-from gtsam import Point3, Pose3, Rot3, Point3Pairs
 from gtsam.utils.test_case import GtsamTestCase
 
-
-def numerical_derivative_pose(pose, method, delta=1e-5):
-    jacobian = np.zeros((6, 6))
-    for idx in range(6):
-        xplus = np.zeros(6)
-        xplus[idx] = delta
-        xminus = np.zeros(6)
-        xminus[idx] = -delta
-        pose_plus = pose.retract(xplus).__getattribute__(method)()
-        pose_minus = pose.retract(xminus).__getattribute__(method)()
-        jacobian[:, idx] = pose_minus.localCoordinates(pose_plus) / (2 * delta)
-    return jacobian
-
-
-def numerical_derivative_2_poses(pose, other_pose, method, delta=1e-5, inputs=()):
-    jacobian = np.zeros((6, 6))
-    other_jacobian = np.zeros((6, 6))
-    for idx in range(6):
-        xplus = np.zeros(6)
-        xplus[idx] = delta
-        xminus = np.zeros(6)
-        xminus[idx] = -delta
-
-        pose_plus = pose.retract(xplus).__getattribute__(method)(*inputs, other_pose)
-        pose_minus = pose.retract(xminus).__getattribute__(method)(*inputs, other_pose)
-        jacobian[:, idx] = pose_minus.localCoordinates(pose_plus) / (2 * delta)
-
-        other_pose_plus = pose.__getattribute__(method)(*inputs, other_pose.retract(xplus))
-        other_pose_minus = pose.__getattribute__(method)(*inputs, other_pose.retract(xminus))
-        other_jacobian[:, idx] = other_pose_minus.localCoordinates(other_pose_plus) / (2 * delta)
-    return jacobian, other_jacobian
-
-
-def numerical_derivative_pose_point(pose, point, method, delta=1e-5):
-    jacobian = np.zeros((3, 6))
-    point_jacobian = np.zeros((3, 3))
-    for idx in range(6):
-        xplus = np.zeros(6)
-        xplus[idx] = delta
-        xminus = np.zeros(6)
-        xminus[idx] = -delta
-
-        point_plus = pose.retract(xplus).__getattribute__(method)(point)
-        point_minus = pose.retract(xminus).__getattribute__(method)(point)
-        jacobian[:, idx] = (point_plus - point_minus) / (2 * delta)
-
-        if idx < 3:
-            xplus = np.zeros(3)
-            xplus[idx] = delta
-            xminus = np.zeros(3)
-            xminus[idx] = -delta
-            point_plus = pose.__getattribute__(method)(point + xplus)
-            point_minus = pose.__getattribute__(method)(point + xminus)
-            point_jacobian[:, idx] = (point_plus - point_minus) / (2 * delta)
-    return jacobian, point_jacobian
-
+import gtsam
+from gtsam import Point3, Pose3, Rot3, Unit3
+from gtsam.utils.numerical_derivative import numericalDerivative11, numericalDerivative21, numericalDerivative22
 
 class TestPose3(GtsamTestCase):
     """Test selected Pose3 methods."""
@@ -90,7 +34,8 @@ class TestPose3(GtsamTestCase):
         jacobian = np.zeros((6, 6), order='F')
         jacobian_other = np.zeros((6, 6), order='F')
         T2.between(T3, jacobian, jacobian_other)
-        jacobian_numerical, jacobian_numerical_other = numerical_derivative_2_poses(T2, T3, 'between')
+        jacobian_numerical = numericalDerivative21(Pose3.between, T2, T3)
+        jacobian_numerical_other = numericalDerivative22(Pose3.between, T2, T3)
         self.gtsamAssertEquals(jacobian, jacobian_numerical)
         self.gtsamAssertEquals(jacobian_other, jacobian_numerical_other)
 
@@ -104,7 +49,7 @@ class TestPose3(GtsamTestCase):
         #test jacobians
         jacobian = np.zeros((6, 6), order='F')
         pose.inverse(jacobian)
-        jacobian_numerical = numerical_derivative_pose(pose, 'inverse')
+        jacobian_numerical = numericalDerivative11(Pose3.inverse, pose)
         self.gtsamAssertEquals(jacobian, jacobian_numerical)
 
     def test_slerp(self):
@@ -123,7 +68,8 @@ class TestPose3(GtsamTestCase):
         jacobian = np.zeros((6, 6), order='F')
         jacobian_other = np.zeros((6, 6), order='F')
         pose0.slerp(0.5, pose1, jacobian, jacobian_other)
-        jacobian_numerical, jacobian_numerical_other = numerical_derivative_2_poses(pose0, pose1, 'slerp', inputs=[0.5])
+        jacobian_numerical = numericalDerivative11(lambda x: x.slerp(0.5, pose1), pose0)
+        jacobian_numerical_other = numericalDerivative11(lambda x: pose0.slerp(0.5, x), pose1)
         self.gtsamAssertEquals(jacobian, jacobian_numerical)
         self.gtsamAssertEquals(jacobian_other, jacobian_numerical_other)
 
@@ -139,7 +85,8 @@ class TestPose3(GtsamTestCase):
         jacobian_pose = np.zeros((3, 6), order='F')
         jacobian_point = np.zeros((3, 3), order='F')
         pose.transformTo(point, jacobian_pose, jacobian_point)
-        jacobian_numerical_pose, jacobian_numerical_point = numerical_derivative_pose_point(pose, point, 'transformTo')
+        jacobian_numerical_pose = numericalDerivative21(Pose3.transformTo, pose, point)
+        jacobian_numerical_point = numericalDerivative22(Pose3.transformTo, pose, point)
         self.gtsamAssertEquals(jacobian_pose, jacobian_numerical_pose)
         self.gtsamAssertEquals(jacobian_point, jacobian_numerical_point)
 
@@ -149,6 +96,16 @@ class TestPose3(GtsamTestCase):
         self.assertEqual(actual_array.shape, (3, 2))
         expected_array = np.stack([expected, expected]).T
         np.testing.assert_allclose(actual_array, expected_array, atol=1e-6)
+
+        # C- and F-contiguous NumPy matrices should map without conversion.
+        for order in ("C", "F"):
+            points = np.array([[3.0, 3.0], [2.0, 2.0], [10.0, 10.0]],
+                              order=order)
+            np.testing.assert_allclose(
+                pose.transformTo(points), expected_array, atol=1e-6)
+
+        with self.assertRaises(TypeError):
+            pose.transformTo([[3.0, 3.0], [2.0, 2.0], [10.0, 10.0]])
 
     def test_transformFrom(self):
         """Test transformFrom method."""
@@ -162,7 +119,8 @@ class TestPose3(GtsamTestCase):
         jacobian_pose = np.zeros((3, 6), order='F')
         jacobian_point = np.zeros((3, 3), order='F')
         pose.transformFrom(point, jacobian_pose, jacobian_point)
-        jacobian_numerical_pose, jacobian_numerical_point = numerical_derivative_pose_point(pose, point, 'transformFrom')
+        jacobian_numerical_pose = numericalDerivative21(Pose3.transformFrom, pose, point)
+        jacobian_numerical_point = numericalDerivative22(Pose3.transformFrom, pose, point)
         self.gtsamAssertEquals(jacobian_pose, jacobian_numerical_pose)
         self.gtsamAssertEquals(jacobian_point, jacobian_numerical_point)
 
@@ -172,6 +130,16 @@ class TestPose3(GtsamTestCase):
         self.assertEqual(actual_array.shape, (3, 2))
         expected_array = np.stack([expected, expected]).T
         np.testing.assert_allclose(actual_array, expected_array, atol=1e-6)
+
+        # C- and F-contiguous NumPy matrices should map without conversion.
+        for order in ("C", "F"):
+            points = np.array([[2.0, 2.0], [1.0, 1.0], [10.0, 10.0]],
+                              order=order)
+            np.testing.assert_allclose(
+                pose.transformFrom(points), expected_array, atol=1e-6)
+
+        with self.assertRaises(TypeError):
+            pose.transformFrom([[2.0, 2.0], [1.0, 1.0], [10.0, 10.0]])
 
     def test_range(self):
         """Test range method."""
@@ -194,6 +162,59 @@ class TestPose3(GtsamTestCase):
         # establish range is indeed sqrt2
         self.assertEqual(math.sqrt(2.0), x1.range(pose=xl2))
 
+        # test jacobians: pose to point
+        pose = Pose3(Rot3.Rodrigues(0.3, 0.2, 0.1), Point3(3.5, -8.2, 4.2))
+        point = Point3(1, 4, -4)
+        jacobian_pose = np.zeros((1, 6), order='F')
+        jacobian_point = np.zeros((1, 3), order='F')
+        pose.range(point, jacobian_pose, jacobian_point)
+        jacobian_numerical_pose = numericalDerivative21(Pose3.range, pose, point)
+        jacobian_numerical_point = numericalDerivative22(Pose3.range, pose, point)
+        self.gtsamAssertEquals(jacobian_pose, jacobian_numerical_pose)
+        self.gtsamAssertEquals(jacobian_point, jacobian_numerical_point)
+
+        # test jacobians: pose to pose
+        other = Pose3(Rot3.Rodrigues(-0.2, 0.3, 0.1), Point3(1, 2, 3))
+        jacobian_self = np.zeros((1, 6), order='F')
+        jacobian_other = np.zeros((1, 6), order='F')
+        pose.range(other, jacobian_self, jacobian_other)
+        jacobian_numerical_self = numericalDerivative21(Pose3.range, pose, other)
+        jacobian_numerical_other = numericalDerivative22(Pose3.range, pose, other)
+        self.gtsamAssertEquals(jacobian_self, jacobian_numerical_self)
+        self.gtsamAssertEquals(jacobian_other, jacobian_numerical_other)
+
+    def test_bearing(self):
+        """Test bearing method."""
+        pose = Pose3(Rot3.Rodrigues(0.3, 0.2, 0.1), Point3(3.5, -8.2, 4.2))
+        point = Point3(1, 4, -4)
+
+        expected = Unit3(pose.transformTo(point))
+        actual = pose.bearing(point)
+        self.gtsamAssertEquals(actual, expected, 1e-6)
+
+        # test jacobians: pose to point
+        jacobian_pose = np.zeros((2, 6), order='F')
+        jacobian_point = np.zeros((2, 3), order='F')
+        pose.bearing(point, jacobian_pose, jacobian_point)
+        jacobian_numerical_pose = numericalDerivative21(Pose3.bearing, pose, point)
+        jacobian_numerical_point = numericalDerivative22(Pose3.bearing, pose, point)
+        self.gtsamAssertEquals(jacobian_pose, jacobian_numerical_pose)
+        self.gtsamAssertEquals(jacobian_point, jacobian_numerical_point)
+
+        # test jacobians: pose to pose (orientation of other is ignored)
+        other = Pose3(Rot3.Rodrigues(-0.2, 0.3, 0.1), Point3(1, 2, 3))
+        expected_pose = Unit3(pose.transformTo(other.translation()))
+        actual_pose = pose.bearing(other)
+        self.gtsamAssertEquals(actual_pose, expected_pose, 1e-6)
+
+        jacobian_self = np.zeros((2, 6), order='F')
+        jacobian_other = np.zeros((2, 6), order='F')
+        pose.bearing(other, jacobian_self, jacobian_other)
+        jacobian_numerical_self = numericalDerivative21(Pose3.bearing, pose, other)
+        jacobian_numerical_other = numericalDerivative22(Pose3.bearing, pose, other)
+        self.gtsamAssertEquals(jacobian_self, jacobian_numerical_self)
+        self.gtsamAssertEquals(jacobian_other, jacobian_numerical_other)
+
     def test_adjoint(self):
         """Test adjoint methods."""
         T = Pose3()
@@ -209,6 +230,7 @@ class TestPose3(GtsamTestCase):
         actual = Pose3.adjoint_(xi, xi)
         np.testing.assert_array_equal(actual, expected)
 
+    @unittest.skipUnless(hasattr(gtsam.Pose3, "serialize"), "Serialization not enabled")
     def test_serialization(self):
         """Test if serialization is working normally"""
         expected = Pose3(Rot3.Ypr(0.0, 1.0, 0.0), Point3(1, 1, 0))
@@ -223,7 +245,7 @@ class TestPose3(GtsamTestCase):
         sTt = Pose3(Rot3.Rodrigues(0, 0, -math.pi), Point3(2, 4, 0))
         transformed = sTt.transformTo(square)
 
-        st_pairs = Point3Pairs()
+        st_pairs = []
         for j in range(4):
             st_pairs.append((square[:,j], transformed[:,j]))
 
@@ -231,9 +253,14 @@ class TestPose3(GtsamTestCase):
         estimated_sTt = Pose3.Align(st_pairs)
         self.gtsamAssertEquals(estimated_sTt, sTt, 1e-10)
 
-        # Matrix version
-        estimated_sTt = Pose3.Align(square, transformed)
-        self.gtsamAssertEquals(estimated_sTt, sTt, 1e-10)
+        # C- and F-contiguous NumPy matrices should map without conversion.
+        for order in ("C", "F"):
+            estimated_sTt = Pose3.Align(np.array(square, order=order),
+                                        np.array(transformed, order=order))
+            self.gtsamAssertEquals(estimated_sTt, sTt, 1e-10)
+
+        with self.assertRaises(TypeError):
+            Pose3.Align(square.tolist(), transformed.tolist())
 
 
 if __name__ == "__main__":

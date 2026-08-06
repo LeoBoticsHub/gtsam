@@ -16,18 +16,17 @@
  *  @date   August, 2014
  */
 
-#include <gtsam/slam/InitializePose3.h> 
-
-#include <gtsam/slam/InitializePose.h> 
-#include <gtsam/nonlinear/PriorFactor.h>
-#include <gtsam/slam/BetweenFactor.h>
-#include <gtsam/nonlinear/GaussNewtonOptimizer.h>
-#include <gtsam/inference/Symbol.h>
+#include <gtsam/base/MatrixConstants.h>
+#include <gtsam/base/VectorConstants.h>
+#include <gtsam/base/timing.h>
 #include <gtsam/geometry/Pose2.h>
 #include <gtsam/geometry/Pose3.h>
-#include <gtsam/base/timing.h>
-
-#include <boost/math/special_functions.hpp>
+#include <gtsam/inference/Symbol.h>
+#include <gtsam/nonlinear/GaussNewtonOptimizer.h>
+#include <gtsam/nonlinear/PriorFactor.h>
+#include <gtsam/slam/BetweenFactor.h>
+#include <gtsam/slam/InitializePose.h>
+#include <gtsam/slam/InitializePose3.h>
 
 #include <utility>
 
@@ -44,7 +43,7 @@ GaussianFactorGraph InitializePose3::buildLinearOrientationGraph(const Nonlinear
     Matrix3 Rij;
     double rotationPrecision = 1.0;
 
-    auto pose3Between = boost::dynamic_pointer_cast<BetweenFactor<Pose3> >(factor);
+    auto pose3Between = std::dynamic_pointer_cast<BetweenFactor<Pose3> >(factor);
     if (pose3Between){
       Rij = pose3Between->measured().rotation().matrix();
       Vector precisions = Vector::Zero(6);
@@ -226,7 +225,7 @@ void InitializePose3::createSymbolicGraph(
   size_t factorId = 0;
   for (const auto& factor : pose3Graph) {
     auto pose3Between =
-        boost::dynamic_pointer_cast<BetweenFactor<Pose3> >(factor);
+        std::dynamic_pointer_cast<BetweenFactor<Pose3> >(factor);
     if (pose3Between) {
       Rot3 Rij = pose3Between->measured().rotation();
       factorId2RotMap->emplace(factorId, Rij);

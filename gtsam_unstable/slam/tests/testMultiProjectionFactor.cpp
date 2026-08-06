@@ -23,7 +23,6 @@
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/LinearContainerFactor.h>
-#include <gtsam/inference/Ordering.h>
 #include <gtsam/nonlinear/Values.h>
 #include <gtsam/inference/Symbol.h>
 #include <gtsam/inference/Key.h>
@@ -73,10 +72,8 @@ TEST( MultiProjectionFactor, create ){
   views.insert(x2);
   views.insert(x3);
 
-  MultiProjectionFactor<Pose3, Point3> mpFactor(n_measPixel, noiseProjection, views, l1, K);
-  graph += mpFactor;
-
-
+  graph.emplace_shared<MultiProjectionFactor<Pose3, Point3>>(
+      n_measPixel, noiseProjection, views, l1, K);
 }
 
 

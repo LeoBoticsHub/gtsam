@@ -14,7 +14,9 @@
  * @brief 3D Point
  */
 
+#include <gtsam/base/MatrixConstants.h>
 #include <gtsam/geometry/Point3.h>
+
 #include <cmath>
 #include <iostream>
 #include <vector>
@@ -67,6 +69,16 @@ Point3 cross(const Point3 &p, const Point3 &q, OptionalJacobian<3, 3> H1,
   if (H2) *H2 << skewSymmetric(p.x(), p.y(), p.z());
   return Point3(p.y() * q.z() - p.z() * q.y(), p.z() * q.x() - p.x() * q.z(),
                 p.x() * q.y() - p.y() * q.x());
+}
+
+Point3 doubleCross(const Point3 &p, const Point3 &q,  //
+                   OptionalJacobian<3, 3> H1, OptionalJacobian<3, 3> H2) {
+  if (H1) *H1 = q.dot(p) * I_3x3 + p * q.transpose() - 2 * q * p.transpose();
+  if (H2) {
+    const Matrix3 W = skewSymmetric(p);
+    *H2 = W * W;
+  }
+  return gtsam::cross(p, gtsam::cross(p, q));
 }
 
 double dot(const Point3 &p, const Point3 &q, OptionalJacobian<1, 3> H1,

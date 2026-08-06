@@ -40,9 +40,9 @@ std::ostream& operator<<(std::ostream& os, const Cal3DS2_Base& cal) {
 }
 
 /* ************************************************************************* */
-void Cal3DS2_Base::print(const std::string& s_) const {
-  gtsam::print((Matrix)K(), s_ + ".K");
-  gtsam::print(Vector(k()), s_ + ".k");
+void Cal3DS2_Base::print(const std::string& s) const {
+  gtsam::print((Matrix)K(), s + ".K");
+  gtsam::print(Vector(k()), s + ".k");
 }
 
 /* ************************************************************************* */
@@ -143,7 +143,7 @@ Point2 Cal3DS2_Base::calibrate(const Point2& pi, OptionalJacobian<2, 9> Dcal,
   Point2 pn = invKPi;
 
   // iterate until the uncalibrate is close to the actual pixel coordinate
-  const int maxIterations = 10;
+  const int maxIterations = 25;
   int iteration;
   for (iteration = 0; iteration < maxIterations; ++iteration) {
     if (distance2(uncalibrate(pn), pi) <= tol_) break;

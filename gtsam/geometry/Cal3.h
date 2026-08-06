@@ -45,8 +45,8 @@ namespace gtsam {
  */
 template <typename Cal, size_t Dim>
 void calibrateJacobians(const Cal& calibration, const Point2& pn,
-                        OptionalJacobian<2, Dim> Dcal = boost::none,
-                        OptionalJacobian<2, 2> Dp = boost::none) {
+                        OptionalJacobian<2, Dim> Dcal = {},
+                        OptionalJacobian<2, 2> Dp = {}) {
   if (Dcal || Dp) {
     Eigen::Matrix<double, 2, Dim> H_uncal_K;
     Matrix22 H_uncal_pn, H_uncal_pn_inv;
@@ -73,9 +73,8 @@ class GTSAM_EXPORT Cal3 {
   double u0_ = 0.0f, v0_ = 0.0f;  ///< principal point
 
  public:
-  enum { dimension = 5 };
   ///< shared pointer to calibration object
-  using shared_ptr = boost::shared_ptr<Cal3>;
+  using shared_ptr = std::shared_ptr<Cal3>;
 
   /// @name Standard Constructors
   /// @{
@@ -136,22 +135,22 @@ class GTSAM_EXPORT Cal3 {
   /// @{
 
   /// focal length x
-  inline double fx() const { return fx_; }
+  double fx() const { return fx_; }
 
   /// focal length y
-  inline double fy() const { return fy_; }
+  double fy() const { return fy_; }
 
   /// aspect ratio
-  inline double aspectRatio() const { return fx_ / fy_; }
+  double aspectRatio() const { return fx_ / fy_; }
 
   /// skew
-  inline double skew() const { return s_; }
+  double skew() const { return s_; }
 
   /// image center in x
-  inline double px() const { return u0_; }
+  double px() const { return u0_; }
 
   /// image center in y
-  inline double py() const { return v0_; }
+  double py() const { return v0_; }
 
   /// return the principal point
   Point2 principalPoint() const { return Point2(u0_, v0_); }
@@ -170,25 +169,15 @@ class GTSAM_EXPORT Cal3 {
     return K;
   }
 
-#ifdef GTSAM_ALLOW_DEPRECATED_SINCE_V42
-  /** @deprecated The following function has been deprecated, use K above */
-  Matrix3 GTSAM_DEPRECATED matrix() const { return K(); }
-#endif
-
   /// Return inverted calibration matrix inv(K)
   Matrix3 inverse() const;
-
-  /// return DOF, dimensionality of tangent space
-  inline virtual size_t dim() const { return Dim(); }
-
-  /// return DOF, dimensionality of tangent space
-  inline static size_t Dim() { return dimension; }
 
   /// @}
   /// @name Advanced Interface
   /// @{
 
  private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION  ///
   /// Serialization function
   friend class boost::serialization::access;
   template <class Archive>
@@ -199,6 +188,7 @@ class GTSAM_EXPORT Cal3 {
     ar& BOOST_SERIALIZATION_NVP(u0_);
     ar& BOOST_SERIALIZATION_NVP(v0_);
   }
+#endif
 
   /// @}
 };

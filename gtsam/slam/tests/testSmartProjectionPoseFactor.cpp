@@ -19,13 +19,16 @@
  *  @date   Sept 2013
  */
 
-#include "smartFactorScenarios.h"
-#include <gtsam/slam/ProjectionFactor.h>
-#include <gtsam/slam/PoseTranslationPrior.h>
-#include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
-#include <gtsam/base/numericalDerivative.h>
 #include <CppUnitLite/TestHarness.h>
+#include <gtsam/base/VectorConstants.h>
+#include <gtsam/base/numericalDerivative.h>
+#include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
+#include <gtsam/slam/PoseTranslationPrior.h>
+#include <gtsam/slam/ProjectionFactor.h>
+
 #include <iostream>
+
+#include "smartFactorScenarios.h"
 
 using namespace std::placeholders;
 
@@ -46,9 +49,13 @@ static Symbol x3('X', 3);
 
 static Point2 measurement1(323.0, 240.0);
 
-LevenbergMarquardtParams lmParams;
-// Make more verbose like so (in tests):
-// lmParams.verbosityLM = LevenbergMarquardtParams::SUMMARY;
+LevenbergMarquardtParams makeLMParams(bool verbose = false) {
+  LevenbergMarquardtParams p;
+  p.linearSolverType = LevenbergMarquardtParams::MULTIFRONTAL_CHOLESKY;
+  if (verbose) p.verbosityLM = LevenbergMarquardtParams::SUMMARY;
+  return p;
+}
+
 }
 
 /* ************************************************************************* */
@@ -138,7 +145,7 @@ TEST( SmartProjectionPoseFactor, noiseless ) {
   factor.triangulateAndComputeE(actualE, values);
 
   // get point
-  boost::optional<Point3> point = factor.point();
+  auto point = factor.point();
   CHECK(point);
 
   // calculate numerical derivative with triangulated point
@@ -264,9 +271,8 @@ TEST(SmartProjectionPoseFactor, smartFactorWithSensorBodyTransform) {
   // original pose3
   values.insert(x3, wTb3 * noise_pose);
 
-  LevenbergMarquardtParams lmParams;
   Values result;
-  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
+  LevenbergMarquardtOptimizer optimizer(graph, values, makeLMParams());
   result = optimizer.optimize();
   EXPECT(assert_equal(wTb3, result.at<Pose3>(x3)));
 }
@@ -327,7 +333,7 @@ TEST( SmartProjectionPoseFactor, 3poses_smart_projection_factor ) {
               Point3(0.1, -0.1, 1.9)), values.at<Pose3>(x3)));
 
   Values result;
-  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
+  LevenbergMarquardtOptimizer optimizer(graph, values, makeLMParams());
   result = optimizer.optimize();
   EXPECT(assert_equal(pose_above, result.at<Pose3>(x3), 1e-6));
 }
@@ -355,7 +361,7 @@ TEST( SmartProjectionPoseFactor, Factors ) {
   // Create smart factors
   KeyVector views {x1, x2};
 
-  SmartFactor::shared_ptr smartFactor1 = boost::make_shared<SmartFactor>(model, sharedK);
+  SmartFactor::shared_ptr smartFactor1 = std::make_shared<SmartFactor>(model, sharedK);
   smartFactor1->add(measurements_cam1, views);
 
   SmartFactor::Cameras cameras;
@@ -366,7 +372,7 @@ TEST( SmartProjectionPoseFactor, Factors ) {
   CHECK(smartFactor1->triangulateSafe(cameras));
   CHECK(!smartFactor1->isDegenerate());
   CHECK(!smartFactor1->isPointBehindCamera());
-  boost::optional<Point3> p = smartFactor1->point();
+  auto p = smartFactor1->point();
   CHECK(p);
   EXPECT(assert_equal(landmark1, *p));
 
@@ -405,7 +411,7 @@ TEST( SmartProjectionPoseFactor, Factors ) {
     RegularHessianFactor<6> expected(x1, x2, G11, G12, g1, G22, g2, f);
     expectedInformation = expected.information();
 
-    boost::shared_ptr<RegularHessianFactor<6> > actual =
+    std::shared_ptr<RegularHessianFactor<6> > actual =
         smartFactor1->createHessianFactor(cameras, 0.0);
     EXPECT(assert_equal(expectedInformation, actual->information(), 1e-6));
     EXPECT(assert_equal(expected, *actual, 1e-6));
@@ -450,7 +456,7 @@ TEST( SmartProjectionPoseFactor, Factors ) {
     JacobianFactorQ<6, 2> expectedQ(keys, Fs, E, P, b, n);
     EXPECT(assert_equal(expectedInformation, expectedQ.information(), 1e-6));
 
-    boost::shared_ptr<JacobianFactorQ<6, 2> > actualQ =
+    std::shared_ptr<JacobianFactorQ<6, 2> > actualQ =
         smartFactor1->createJacobianQFactor(cameras, 0.0);
     CHECK(actualQ);
     EXPECT(assert_equal(expectedInformation, actualQ->information(), 1e-6));
@@ -467,7 +473,7 @@ TEST( SmartProjectionPoseFactor, Factors ) {
     // createRegularImplicitSchurFactor
     RegularImplicitSchurFactor<Camera> expected(keys, Fs, E, whiteP, b);
 
-    boost::shared_ptr<RegularImplicitSchurFactor<Camera> > actual =
+    std::shared_ptr<RegularImplicitSchurFactor<Camera> > actual =
         smartFactor1->createRegularImplicitSchurFactor(cameras, 0.0);
     CHECK(actual);
     EXPECT(assert_equal(expectedInformation, expected.information(), 1e-6));
@@ -486,7 +492,7 @@ TEST( SmartProjectionPoseFactor, Factors ) {
     JacobianFactor expected(x1, s * A1, x2, s * A2, b, n);
     EXPECT(assert_equal(expectedInformation, expected.information(), 1e-6));
 
-    boost::shared_ptr<JacobianFactor> actual =
+    std::shared_ptr<JacobianFactor> actual =
         smartFactor1->createJacobianSVDFactor(cameras, 0.0);
     CHECK(actual);
     EXPECT(assert_equal(expectedInformation, actual->information(), 1e-6));
@@ -545,7 +551,7 @@ TEST( SmartProjectionPoseFactor, 3poses_iterative_smart_projection_factor ) {
           values.at<Pose3>(x3)));
 
   Values result;
-  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
+  LevenbergMarquardtOptimizer optimizer(graph, values, makeLMParams());
   result = optimizer.optimize();
   EXPECT(assert_equal(pose_above, result.at<Pose3>(x3), 1e-7));
 }
@@ -601,7 +607,7 @@ TEST( SmartProjectionPoseFactor, jacobianSVD ) {
   values.insert(x3, pose_above * noise_pose);
 
   Values result;
-  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
+  LevenbergMarquardtOptimizer optimizer(graph, values, makeLMParams());
   result = optimizer.optimize();
   EXPECT(assert_equal(pose_above, result.at<Pose3>(x3), 1e-6));
 }
@@ -660,7 +666,7 @@ TEST( SmartProjectionPoseFactor, landmarkDistance ) {
 
   // All factors are disabled and pose should remain where it is
   Values result;
-  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
+  LevenbergMarquardtOptimizer optimizer(graph, values, makeLMParams());
   result = optimizer.optimize();
   EXPECT(assert_equal(values.at<Pose3>(x3), result.at<Pose3>(x3)));
 }
@@ -726,7 +732,7 @@ TEST( SmartProjectionPoseFactor, dynamicOutlierRejection ) {
 
   // All factors are disabled and pose should remain where it is
   Values result;
-  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
+  LevenbergMarquardtOptimizer optimizer(graph, values, makeLMParams());
   result = optimizer.optimize();
   EXPECT(assert_equal(cam3.pose(), result.at<Pose3>(x3)));
 }
@@ -777,7 +783,7 @@ TEST( SmartProjectionPoseFactor, jacobianQ ) {
   values.insert(x3, pose_above * noise_pose);
 
   Values result;
-  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
+  LevenbergMarquardtOptimizer optimizer(graph, values, makeLMParams());
   result = optimizer.optimize();
   EXPECT(assert_equal(pose_above, result.at<Pose3>(x3), 1e-6));
 }
@@ -821,7 +827,7 @@ TEST( SmartProjectionPoseFactor, 3poses_projection_factor ) {
 
   DOUBLES_EQUAL(48406055, graph.error(values), 1);
 
-  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
+  LevenbergMarquardtOptimizer optimizer(graph, values, makeLMParams());
   Values result = optimizer.optimize();
 
   DOUBLES_EQUAL(0, graph.error(result), 1e-9);
@@ -887,14 +893,14 @@ TEST( SmartProjectionPoseFactor, CheckHessian) {
               Point3(0.0897734171, -0.110201006, 0.901022872)),
           values.at<Pose3>(x3)));
 
-  boost::shared_ptr<GaussianFactor> factor1 = smartFactor1->linearize(values);
-  boost::shared_ptr<GaussianFactor> factor2 = smartFactor2->linearize(values);
-  boost::shared_ptr<GaussianFactor> factor3 = smartFactor3->linearize(values);
+  std::shared_ptr<GaussianFactor> factor1 = smartFactor1->linearize(values);
+  std::shared_ptr<GaussianFactor> factor2 = smartFactor2->linearize(values);
+  std::shared_ptr<GaussianFactor> factor3 = smartFactor3->linearize(values);
 
   Matrix CumulativeInformation = factor1->information() + factor2->information()
       + factor3->information();
 
-  boost::shared_ptr<GaussianFactorGraph> GaussianGraph = graph.linearize(
+  std::shared_ptr<GaussianFactorGraph> GaussianGraph = graph.linearize(
       values);
   Matrix GraphInformation = GaussianGraph->hessian().first;
 
@@ -960,7 +966,7 @@ TEST( SmartProjectionPoseFactor, 3poses_2land_rotation_only_smart_projection_fac
   values.insert(x3, pose3 * noise_pose);
 
   // params.verbosityLM = LevenbergMarquardtParams::SUMMARY;
-  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
+  LevenbergMarquardtOptimizer optimizer(graph, values, makeLMParams());
   Values result = optimizer.optimize();
   EXPECT(assert_equal(pose3, result.at<Pose3>(x3)));
 }
@@ -1033,7 +1039,7 @@ TEST( SmartProjectionPoseFactor, 3poses_rotation_only_smart_projection_factor ) 
           values.at<Pose3>(x3)));
 
   Values result;
-  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
+  LevenbergMarquardtOptimizer optimizer(graph, values, makeLMParams());
   result = optimizer.optimize();
 
   // Since we do not do anything on degenerate instances (ZERO_ON_DEGENERACY)
@@ -1071,7 +1077,7 @@ TEST( SmartProjectionPoseFactor, Hessian ) {
   values.insert(x1, cam1.pose());
   values.insert(x2, cam2.pose());
 
-  boost::shared_ptr<GaussianFactor> factor = smartFactor1->linearize(values);
+  std::shared_ptr<GaussianFactor> factor = smartFactor1->linearize(values);
 
   // compute triangulation from linearization point
   // compute reprojection errors (sum squared)
@@ -1099,7 +1105,7 @@ TEST( SmartProjectionPoseFactor, HessianWithRotation ) {
   values.insert(x2, cam2.pose());
   values.insert(x3, cam3.pose());
 
-  boost::shared_ptr<GaussianFactor> factor = smartFactorInstance->linearize(
+  std::shared_ptr<GaussianFactor> factor = smartFactorInstance->linearize(
       values);
 
   Pose3 poseDrift = Pose3(Rot3::Ypr(-M_PI / 2, 0., -M_PI / 2), Point3(0, 0, 0));
@@ -1109,7 +1115,7 @@ TEST( SmartProjectionPoseFactor, HessianWithRotation ) {
   rotValues.insert(x2, poseDrift.compose(pose_right));
   rotValues.insert(x3, poseDrift.compose(pose_above));
 
-  boost::shared_ptr<GaussianFactor> factorRot = smartFactorInstance->linearize(
+  std::shared_ptr<GaussianFactor> factorRot = smartFactorInstance->linearize(
       rotValues);
 
   // Hessian is invariant to rotations in the nondegenerate case
@@ -1123,7 +1129,7 @@ TEST( SmartProjectionPoseFactor, HessianWithRotation ) {
   tranValues.insert(x2, poseDrift2.compose(pose_right));
   tranValues.insert(x3, poseDrift2.compose(pose_above));
 
-  boost::shared_ptr<GaussianFactor> factorRotTran =
+  std::shared_ptr<GaussianFactor> factorRotTran =
       smartFactorInstance->linearize(tranValues);
 
   // Hessian is invariant to rotations and translations in the nondegenerate case
@@ -1152,7 +1158,7 @@ TEST( SmartProjectionPoseFactor, HessianWithRotationDegenerate ) {
   values.insert(x2, cam2.pose());
   values.insert(x3, cam3.pose());
 
-  boost::shared_ptr<GaussianFactor> factor = smartFactor->linearize(values);
+  std::shared_ptr<GaussianFactor> factor = smartFactor->linearize(values);
 
   Pose3 poseDrift = Pose3(Rot3::Ypr(-M_PI / 2, 0., -M_PI / 2), Point3(0, 0, 0));
 
@@ -1161,7 +1167,7 @@ TEST( SmartProjectionPoseFactor, HessianWithRotationDegenerate ) {
   rotValues.insert(x2, poseDrift.compose(level_pose));
   rotValues.insert(x3, poseDrift.compose(level_pose));
 
-  boost::shared_ptr<GaussianFactor> factorRot = //
+  std::shared_ptr<GaussianFactor> factorRot = //
       smartFactor->linearize(rotValues);
 
   // Hessian is invariant to rotations in the nondegenerate case
@@ -1175,7 +1181,7 @@ TEST( SmartProjectionPoseFactor, HessianWithRotationDegenerate ) {
   tranValues.insert(x2, poseDrift2.compose(level_pose));
   tranValues.insert(x3, poseDrift2.compose(level_pose));
 
-  boost::shared_ptr<GaussianFactor> factorRotTran = smartFactor->linearize(
+  std::shared_ptr<GaussianFactor> factorRotTran = smartFactor->linearize(
       tranValues);
 
   // Hessian is invariant to rotations and translations in the nondegenerate case
@@ -1242,7 +1248,7 @@ TEST( SmartProjectionPoseFactor, Cal3Bundler ) {
               Point3(0.1, -0.1, 1.9)), values.at<Pose3>(x3)));
 
   Values result;
-  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
+  LevenbergMarquardtOptimizer optimizer(graph, values, makeLMParams());
   result = optimizer.optimize();
   EXPECT(assert_equal(cam3.pose(), result.at<Pose3>(x3), 1e-6));
 }
@@ -1318,7 +1324,7 @@ TEST( SmartProjectionPoseFactor, Cal3BundlerRotationOnly ) {
           values.at<Pose3>(x3)));
 
   Values result;
-  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
+  LevenbergMarquardtOptimizer optimizer(graph, values, makeLMParams());
   result = optimizer.optimize();
 
   EXPECT(

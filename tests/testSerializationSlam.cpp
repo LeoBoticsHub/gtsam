@@ -50,6 +50,7 @@
 #include <gtsam/linear/GaussianISAM.h>
 #include <gtsam/inference/Symbol.h>
 #include <gtsam/base/serializationTestHelpers.h>
+#include <gtsam/base/std_optional_serialization.h>
 
 #include <boost/archive/xml_iarchive.hpp>
 #include <boost/serialization/export.hpp>
@@ -216,7 +217,7 @@ BOOST_CLASS_EXPORT_GUID(GenericStereoFactor3D, "gtsam::GenericStereoFactor3D")
 TEST (testSerializationSLAM, smallExample_linear) {
   using namespace example;
 
-  Ordering ordering; ordering += X(1),X(2),L(1);
+  const Ordering ordering{X(1), X(2), L(1)};
   EXPECT(equalsObj(ordering));
   EXPECT(equalsXML(ordering));
   EXPECT(equalsBinary(ordering));
@@ -279,7 +280,7 @@ TEST (testSerializationSLAM, factors) {
   Cal3_S2Stereo cal3_s2stereo(1.0, 2.0, 3.0, 4.0, 5.0, 1.0);
   CalibratedCamera calibratedCamera(pose3);
   PinholeCamera<Cal3_S2> simpleCamera(pose3, cal3_s2);
-  StereoCamera stereoCamera(pose3, boost::make_shared<Cal3_S2Stereo>(cal3_s2stereo));
+  StereoCamera stereoCamera(pose3, std::make_shared<Cal3_S2Stereo>(cal3_s2stereo));
 
 
   Symbol  a01('a',1),  a02('a',2),  a03('a',3),  a04('a',4),  a05('a',5),
@@ -311,7 +312,6 @@ TEST (testSerializationSLAM, factors) {
   SharedNoiseModel model5 = noiseModel::Isotropic::Sigma(5, 0.3);
   SharedNoiseModel model6 = noiseModel::Isotropic::Sigma(6, 0.3);
   SharedNoiseModel model9 = noiseModel::Isotropic::Sigma(9, 0.3);
-  SharedNoiseModel model11 = noiseModel::Isotropic::Sigma(11, 0.3);
 
   SharedNoiseModel robust1 = noiseModel::Robust::Create(
       noiseModel::mEstimator::Huber::Create(10.0, noiseModel::mEstimator::Huber::Scalar),
@@ -331,7 +331,7 @@ TEST (testSerializationSLAM, factors) {
   PriorFactorCal3_S2 priorFactorCal3_S2(a10, cal3_s2, model5);
   PriorFactorCal3DS2 priorFactorCal3DS2(a11, cal3ds2, model9);
   PriorFactorCalibratedCamera priorFactorCalibratedCamera(a12, calibratedCamera, model6);
-  PriorFactorStereoCamera priorFactorStereoCamera(a14, stereoCamera, model11);
+  PriorFactorStereoCamera priorFactorStereoCamera(a14, stereoCamera, model6);
 
   BetweenFactorPoint2 betweenFactorPoint2(a03, b03, point2, model2);
   BetweenFactorPoint3 betweenFactorPoint3(a05, b05, point3, model3);
@@ -363,14 +363,14 @@ TEST (testSerializationSLAM, factors) {
 
   BearingRangeFactor2D bearingRangeFactor2D(a08, a03, rot2, 2.0, model2);
 
-  GenericProjectionFactorCal3_S2 genericProjectionFactorCal3_S2(point2, model2, a09, a05, boost::make_shared<Cal3_S2>(cal3_s2));
-  GenericProjectionFactorCal3DS2 genericProjectionFactorCal3DS2(point2, model2, a09, a05, boost::make_shared<Cal3DS2>(cal3ds2));
+  GenericProjectionFactorCal3_S2 genericProjectionFactorCal3_S2(point2, model2, a09, a05, std::make_shared<Cal3_S2>(cal3_s2));
+  GenericProjectionFactorCal3DS2 genericProjectionFactorCal3DS2(point2, model2, a09, a05, std::make_shared<Cal3DS2>(cal3ds2));
 
   GeneralSFMFactorCal3_S2 generalSFMFactorCal3_S2(point2, model2, a13, a05);
 
   GeneralSFMFactor2Cal3_S2 generalSFMFactor2Cal3_S2(point2, model2, a09, a05, a10);
 
-  GenericStereoFactor3D genericStereoFactor3D(stereoPoint2, model3, a09, a05, boost::make_shared<Cal3_S2Stereo>(cal3_s2stereo));
+  GenericStereoFactor3D genericStereoFactor3D(stereoPoint2, model3, a09, a05, std::make_shared<Cal3_S2Stereo>(cal3_s2stereo));
 
 
   NonlinearFactorGraph graph;

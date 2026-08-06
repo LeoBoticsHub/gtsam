@@ -19,10 +19,11 @@
  * @author  Varun Agrawal
  */
 
+#include <gtsam/base/MatrixConstants.h>
 #include <gtsam/geometry/Rot3.h>
 #include <gtsam/geometry/SO3.h>
-#include <boost/math/constants/constants.hpp>
 
+#include <cassert>
 #include <cmath>
 #include <random>
 
@@ -121,7 +122,7 @@ Unit3 Rot3::unrotate(const Unit3& p,
     OptionalJacobian<2,3> HR, OptionalJacobian<2,2> Hp) const {
   Matrix32 Dp;
   Unit3 q = Unit3(unrotate(p.point3(Dp)));
-  if (Hp) *Hp = q.basis().transpose() * matrix().transpose () * Dp;
+  if (Hp) *Hp = q.basis().transpose() * matrix().transpose() * Dp;
   if (HR) *HR = q.basis().transpose() * q.skew();
   return q;
 }
@@ -146,6 +147,7 @@ Point3 Rot3::unrotate(const Point3& p, OptionalJacobian<3,3> H1,
 }
 
 /* ************************************************************************* */
+#ifdef GTSAM_ALLOW_DEPRECATED_SINCE_V43
 Point3 Rot3::column(int index) const{
   if(index == 3)
     return r3();
@@ -156,6 +158,7 @@ Point3 Rot3::column(int index) const{
   else
     throw invalid_argument("Argument to Rot3::column must be 1, 2, or 3");
 }
+#endif
 
 /* ************************************************************************* */
 Vector3 Rot3::xyz(OptionalJacobian<3, 3> H) const {
@@ -170,13 +173,13 @@ Vector3 Rot3::xyz(OptionalJacobian<3, 3> H) const {
 #endif
 
     Matrix39 qHm;
-    boost::tie(I, q) = RQ(m, qHm);
+    std::tie(I, q) = RQ(m, qHm);
 
     // TODO : Explore whether this expression can be optimized as both
     // qHm and mH are super-sparse
     *H = qHm * mH;
   } else
-    boost::tie(I, q) = RQ(matrix());
+    std::tie(I, q) = RQ(matrix());
   return q;
 }
 
@@ -226,19 +229,6 @@ double Rot3::yaw(OptionalJacobian<1, 3> H) const {
     y = xyz()(2);
   return y;
 }
-
-/* ************************************************************************* */
-#ifdef GTSAM_ALLOW_DEPRECATED_SINCE_V42
-Vector Rot3::quaternion() const {
-  gtsam::Quaternion q = toQuaternion();
-  Vector v(4);
-  v(0) = q.w();
-  v(1) = q.x();
-  v(2) = q.y();
-  v(3) = q.z();
-  return v;
-}
-#endif
 
 /* ************************************************************************* */
 pair<Unit3, double> Rot3::axisAngle() const {
@@ -330,4 +320,3 @@ Rot3 Rot3::slerp(double t, const Rot3& other) const {
 /* ************************************************************************* */
 
 } // namespace gtsam
-

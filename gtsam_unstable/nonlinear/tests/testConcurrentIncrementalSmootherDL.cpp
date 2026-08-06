@@ -26,7 +26,6 @@
 #include <gtsam/nonlinear/Values.h>
 #include <gtsam/inference/Symbol.h>
 #include <gtsam/inference/Key.h>
-#include <gtsam/inference/Ordering.h>
 #include <gtsam/inference/JunctionTree.h>
 #include <gtsam/geometry/Pose3.h>
 #include <gtsam/base/TestableAssertions.h>
@@ -584,10 +583,10 @@ TEST( ConcurrentIncrementalSmootherDL, synchronize_3 )
     allkeys.erase(key);
   }
   KeyVector variables(allkeys.begin(), allkeys.end());
-  std::pair<GaussianBayesNet::shared_ptr, GaussianFactorGraph::shared_ptr> result = LinFactorGraph->eliminatePartialSequential(variables, EliminateCholesky);
+  const auto [bn, fg] = LinFactorGraph->eliminatePartialSequential(variables, EliminateCholesky);
 
   expectedSmootherSummarization.resize(0);
-  for(const GaussianFactor::shared_ptr& factor: *result.second) {
+  for(const GaussianFactor::shared_ptr& factor: *fg) {
     expectedSmootherSummarization.push_back(LinearContainerFactor(factor, allValues));
   }
 

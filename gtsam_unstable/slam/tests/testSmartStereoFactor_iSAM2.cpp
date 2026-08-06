@@ -22,10 +22,7 @@
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 #include <gtsam_unstable/slam/SmartStereoProjectionPoseFactor.h>
 
-#include <array>
-#include <fstream>
 #include <iostream>
-#include <sstream>
 #include <string>
 #include <vector>
 
@@ -40,6 +37,15 @@
 
 // Tolerance for ground-truth pose comparison:
 static const double tol = 1e-3;
+
+namespace  {
+gtsam::LevenbergMarquardtParams makeLmParams() {
+  gtsam::LevenbergMarquardtParams params;
+  params.linearSolverType =
+      gtsam::LevenbergMarquardtParams::MULTIFRONTAL_CHOLESKY;
+  return params;
+}
+}  // namespace
 
 // Synthetic dataset generated with rwt
 // (https://github.com/jlblancoc/recursive-world-toolkit)
@@ -156,7 +162,7 @@ TEST(testISAM2SmartFactor, Stereo_Batch) {
   using symbol_shorthand::X;
 
   const auto K =
-      boost::make_shared<Cal3_S2Stereo>(fx, fy, .0, cx, cy, baseline);
+      std::make_shared<Cal3_S2Stereo>(fx, fy, .0, cx, cy, baseline);
 
   // Pose prior - at identity
   auto priorPoseNoise = noiseModel::Diagonal::Sigmas(
@@ -184,7 +190,7 @@ TEST(testISAM2SmartFactor, Stereo_Batch) {
         SmartProjectionParams parm(HESSIAN, ZERO_ON_DEGENERACY);
 
         smartFactors[stObs.lm_id] =
-            boost::make_shared<SmartStereoProjectionPoseFactor>(noise, parm);
+            std::make_shared<SmartStereoProjectionPoseFactor>(noise, parm);
 
         batch_graph.push_back(smartFactors[stObs.lm_id]);
       }
@@ -204,7 +210,7 @@ TEST(testISAM2SmartFactor, Stereo_Batch) {
     batch_values.insert(X(kf_id), Pose3::Identity());
   }
 
-  LevenbergMarquardtParams parameters;
+  LevenbergMarquardtParams parameters = makeLmParams();
 #if TEST_VERBOSE_OUTPUT
   parameters.verbosity = NonlinearOptimizerParams::LINEAR;
   parameters.verbosityLM = LevenbergMarquardtParams::TRYDELTA;
@@ -242,7 +248,7 @@ TEST(testISAM2SmartFactor, Stereo_iSAM2) {
   using symbol_shorthand::X;
 
   const auto K =
-      boost::make_shared<Cal3_S2Stereo>(fx, fy, .0, cx, cy, baseline);
+      std::make_shared<Cal3_S2Stereo>(fx, fy, .0, cx, cy, baseline);
 
   ISAM2Params parameters;
   parameters.relinearizeThreshold = 0.01;
@@ -290,7 +296,7 @@ TEST(testISAM2SmartFactor, Stereo_iSAM2) {
         SmartProjectionParams params(HESSIAN, ZERO_ON_DEGENERACY);
 
         smartFactors[stObs.lm_id] =
-            boost::make_shared<SmartStereoProjectionPoseFactor>(noise, params);
+            std::make_shared<SmartStereoProjectionPoseFactor>(noise, params);
         newFactor2lm[newFactors.size()] = stObs.lm_id;
         newFactors.push_back(smartFactors[stObs.lm_id]);
       } else {

@@ -32,10 +32,10 @@ class GTSAM_EXPORT Cal3_S2Stereo : public Cal3_S2 {
   double b_ = 1.0f;  ///< Stereo baseline.
 
  public:
-  enum { dimension = 6 };
+  constexpr static auto dimension = 6;
 
   ///< shared pointer to stereo calibration object
-  using shared_ptr = boost::shared_ptr<Cal3_S2Stereo>;
+  using shared_ptr = std::shared_ptr<Cal3_S2Stereo>;
 
   /// @name Standard Constructors
   /// @{
@@ -64,8 +64,8 @@ class GTSAM_EXPORT Cal3_S2Stereo : public Cal3_S2 {
    * @param Dp optional 2*2 Jacobian wrpt intrinsic coordinates
    * @return point in image coordinates
    */
-  Point2 uncalibrate(const Point2& p, OptionalJacobian<2, 6> Dcal = boost::none,
-                     OptionalJacobian<2, 2> Dp = boost::none) const;
+  Point2 uncalibrate(const Point2& p, OptionalJacobian<2, 6> Dcal = {},
+                     OptionalJacobian<2, 2> Dp = {}) const;
 
   /**
    * Convert image coordinates uv to intrinsic coordinates xy
@@ -74,8 +74,8 @@ class GTSAM_EXPORT Cal3_S2Stereo : public Cal3_S2 {
    * @param Dp optional 2*2 Jacobian wrpt intrinsic coordinates
    * @return point in intrinsic coordinates
    */
-  Point2 calibrate(const Point2& p, OptionalJacobian<2, 6> Dcal = boost::none,
-                   OptionalJacobian<2, 2> Dp = boost::none) const;
+  Point2 calibrate(const Point2& p, OptionalJacobian<2, 6> Dcal = {},
+                   OptionalJacobian<2, 2> Dp = {}) const;
 
   /**
    * Convert homogeneous image coordinates to intrinsic coordinates
@@ -108,7 +108,7 @@ class GTSAM_EXPORT Cal3_S2Stereo : public Cal3_S2 {
   Matrix3 K() const override { return Cal3_S2::K(); }
 
   /// return baseline
-  inline double baseline() const { return b_; }
+  double baseline() const { return b_; }
 
   /// vectorized form (column-wise)
   Vector6 vector() const {
@@ -122,13 +122,13 @@ class GTSAM_EXPORT Cal3_S2Stereo : public Cal3_S2 {
   /// @{
 
   /// return DOF, dimensionality of tangent space
-  inline size_t dim() const override { return Dim(); }
+  size_t dim() const override { return Dim(); }
 
   /// return DOF, dimensionality of tangent space
-  inline static size_t Dim() { return dimension; }
+  static size_t Dim() { return dimension; }
 
   /// Given 6-dim tangent vector, create new calibration
-  inline Cal3_S2Stereo retract(const Vector& d) const {
+  Cal3_S2Stereo retract(const Vector& d) const {
     return Cal3_S2Stereo(fx() + d(0), fy() + d(1), skew() + d(2), px() + d(3),
                          py() + d(4), b_ + d(5));
   }
@@ -143,6 +143,7 @@ class GTSAM_EXPORT Cal3_S2Stereo : public Cal3_S2 {
   /// @{
 
  private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
   /** Serialization function */
   friend class boost::serialization::access;
   template <class Archive>
@@ -151,6 +152,7 @@ class GTSAM_EXPORT Cal3_S2Stereo : public Cal3_S2 {
         "Cal3_S2", boost::serialization::base_object<Cal3_S2>(*this));
     ar& BOOST_SERIALIZATION_NVP(b_);
   }
+#endif
   /// @}
 };
 

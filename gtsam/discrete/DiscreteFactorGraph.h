@@ -14,6 +14,7 @@
  * @date Feb 14, 2011
  * @author Duy-Nguyen Ta
  * @author Frank Dellaert
+ * @author Varun Agrawal
  */
 
 #pragma once
@@ -22,10 +23,8 @@
 #include <gtsam/discrete/DiscreteLookupDAG.h>
 #include <gtsam/inference/EliminateableFactorGraph.h>
 #include <gtsam/inference/FactorGraph.h>
-#include <gtsam/inference/Ordering.h>
 #include <gtsam/base/FastSet.h>
 
-#include <boost/make_shared.hpp>
 #include <string>
 #include <utility>
 #include <vector>
@@ -49,7 +48,7 @@ class DiscreteJunctionTree;
  * @ingroup discrete
  */
 GTSAM_EXPORT
-std::pair<DiscreteConditional::shared_ptr, DecisionTreeFactor::shared_ptr>
+std::pair<DiscreteConditional::shared_ptr, DiscreteFactor::shared_ptr>
 EliminateDiscrete(const DiscreteFactorGraph& factors,
                   const Ordering& frontalKeys);
 
@@ -62,7 +61,7 @@ EliminateDiscrete(const DiscreteFactorGraph& factors,
  * @ingroup discrete
  */
 GTSAM_EXPORT
-std::pair<DiscreteConditional::shared_ptr, DecisionTreeFactor::shared_ptr>
+std::pair<DiscreteConditional::shared_ptr, DiscreteFactor::shared_ptr>
 EliminateForMPE(const DiscreteFactorGraph& factors,
                 const Ordering& frontalKeys);
 
@@ -77,8 +76,8 @@ template<> struct EliminationTraits<DiscreteFactorGraph>
   typedef DiscreteJunctionTree JunctionTreeType;       ///< Type of Junction tree
   
   /// The default dense elimination function
-  static std::pair<boost::shared_ptr<ConditionalType>,
-                   boost::shared_ptr<FactorType> >
+  static std::pair<std::shared_ptr<ConditionalType>,
+                   std::shared_ptr<FactorType> >
   DefaultEliminate(const FactorGraphType& factors, const Ordering& keys) {
     return EliminateDiscrete(factors, keys);
   }
@@ -86,8 +85,8 @@ template<> struct EliminationTraits<DiscreteFactorGraph>
   /// The default ordering generation function
   static Ordering DefaultOrderingFunc(
       const FactorGraphType& graph,
-      boost::optional<const VariableIndex&> variableIndex) {
-    return Ordering::Colamd(*variableIndex);
+      std::optional<std::reference_wrapper<const VariableIndex>> variableIndex) {
+    return Ordering::Colamd((*variableIndex).get());
   }
 };
 
@@ -104,7 +103,7 @@ class GTSAM_EXPORT DiscreteFactorGraph
   using Base = FactorGraph<DiscreteFactor>;  ///< base factor graph type
   using BaseEliminateable =
       EliminateableFactorGraph<This>;          ///< for elimination
-  using shared_ptr = boost::shared_ptr<This>;  ///< shared_ptr to This
+  using shared_ptr = std::shared_ptr<This>;  ///< shared_ptr to This
 
   using Values = DiscreteValues;  ///< backwards compatibility
 
@@ -137,6 +136,7 @@ class GTSAM_EXPORT DiscreteFactorGraph
 
   /// @}
 
+  //TODO(Varun): Make compatible with TableFactor
   /** Add a decision-tree factor */
   template <typename... Args>
   void add(Args&&... args) {
@@ -150,7 +150,16 @@ class GTSAM_EXPORT DiscreteFactorGraph
   DiscreteKeys discreteKeys() const;
 
   /** return product of all factors as a single factor */
-  DecisionTreeFactor product() const;
+  DiscreteFactor::shared_ptr product() const;
+
+  /**
+   * @brief Return product of all `factors` as a single factor,
+   * which is scaled by the max value to prevent underflow
+   *
+   * @param factors The factors to multiply as a DiscreteFactorGraph.
+   * @return DiscreteFactor::shared_ptr
+   */
+  DiscreteFactor::shared_ptr scaledProduct() const;
 
   /** 
    * Evaluates the factor graph given values, returns the joint probability of
@@ -170,7 +179,7 @@ class GTSAM_EXPORT DiscreteFactorGraph
    * @return DiscreteBayesNet encoding posterior P(X|Z)
    */
   DiscreteBayesNet sumProduct(
-      OptionalOrderingType orderingType = boost::none) const;
+      OptionalOrderingType orderingType = {}) const;
 
   /**
    * @brief Implement the sum-product algorithm
@@ -187,7 +196,7 @@ class GTSAM_EXPORT DiscreteFactorGraph
    * @return DiscreteLookupDAG DAG with lookup tables
    */
   DiscreteLookupDAG maxProduct(
-      OptionalOrderingType orderingType = boost::none) const;
+      OptionalOrderingType orderingType = {}) const;
 
   /**
    * @brief Implement the max-product algorithm
@@ -204,7 +213,7 @@ class GTSAM_EXPORT DiscreteFactorGraph
    * @return DiscreteValues : MPE
    */
   DiscreteValues optimize(
-      OptionalOrderingType orderingType = boost::none) const;
+      OptionalOrderingType orderingType = {}) const;
 
   /**
    * @brief Find the maximum probable explanation (MPE) by doing max-product.

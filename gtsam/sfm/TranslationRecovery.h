@@ -16,10 +16,7 @@
  * @brief Recovering translations in an epipolar graph when rotations are given.
  */
 
-#include <gtsam/geometry/Unit3.h>
-#include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
-#include <gtsam/nonlinear/Values.h>
-#include <gtsam/sfm/BinaryMeasurement.h>
+#include <gtsam/sfm/LocationRecovery.h>
 
 #include <map>
 #include <set>
@@ -48,7 +45,7 @@ namespace gtsam {
 // where s is an arbitrary scale that can be supplied, default 1.0. Hence, two
 // versions are supplied below corresponding to whether we have initial values
 // or not.
-class TranslationRecovery {
+class GTSAM_EXPORT TranslationRecovery : public LocationRecovery {
  public:
   using KeyPair = std::pair<Key, Key>;
   using TranslationEdges = std::vector<BinaryMeasurement<Unit3>>;
@@ -57,8 +54,7 @@ class TranslationRecovery {
   // Translation directions between camera pairs.
   TranslationEdges relativeTranslations_;
 
-  // Parameters.
-  LevenbergMarquardtParams lmParams_;
+  const bool use_bilinear_translation_factor_ = false;
 
  public:
   /**
@@ -66,8 +62,10 @@ class TranslationRecovery {
    *
    * @param lmParams parameters for optimization.
    */
-  TranslationRecovery(const LevenbergMarquardtParams &lmParams)
-      : lmParams_(lmParams) {}
+  TranslationRecovery(const LevenbergMarquardtParams &lmParams,
+                      bool use_bilinear_translation_factor = false)
+      : LocationRecovery(lmParams),
+        use_bilinear_translation_factor_(use_bilinear_translation_factor) {}
 
   /**
    * @brief Default constructor.
@@ -115,7 +113,7 @@ class TranslationRecovery {
    * @param betweenTranslations relative translations (with scale) between 2
    * points in world coordinate frame known a priori.
    * @param rng random number generator
-   * @param intialValues (optional) initial values from a prior
+   * @param initialValues (optional) initial values from a prior
    * @return Values
    */
   Values initializeRandomly(
@@ -152,7 +150,7 @@ class TranslationRecovery {
    * points in world coordinate frame known a priori. Unlike
    * relativeTranslations, zero-magnitude betweenTranslations are not treated as
    * hard constraints.
-   * @param initialValues intial values for optimization. Initializes randomly
+   * @param initialValues initial values for optimization. Initializes randomly
    * if not provided.
    * @return Values
    */

@@ -19,6 +19,7 @@
 #pragma once
 
 #include <gtsam/nonlinear/NonlinearFactor.h>
+#include <gtsam/nonlinear/NoiseModelFactorN.h>
 #include <gtsam/geometry/EssentialMatrix.h>
 
 namespace gtsam {
@@ -38,8 +39,11 @@ private:
 
 public:
 
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
+
   // shorthand for a smart pointer to a factor
-  typedef boost::shared_ptr<EssentialMatrixConstraint> shared_ptr;
+  typedef std::shared_ptr<EssentialMatrixConstraint> shared_ptr;
 
   /** default constructor - only use for serialization */
   EssentialMatrixConstraint() {
@@ -62,7 +66,7 @@ public:
 
   /// @return a deep copy of this factor
   gtsam::NonlinearFactor::shared_ptr clone() const override {
-    return boost::static_pointer_cast<gtsam::NonlinearFactor>(
+    return std::static_pointer_cast<gtsam::NonlinearFactor>(
         gtsam::NonlinearFactor::shared_ptr(new This(*this)));
   }
 
@@ -79,8 +83,7 @@ public:
 
   /** vector of errors */
   Vector evaluateError(const Pose3& p1, const Pose3& p2,
-      boost::optional<Matrix&> Hp1 = boost::none, //
-      boost::optional<Matrix&> Hp2 = boost::none) const override;
+      OptionalMatrixType Hp1, OptionalMatrixType Hp2) const override;
 
   /** return the measured */
   const EssentialMatrix& measured() const {
@@ -89,6 +92,7 @@ public:
 
 private:
 
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
   /** Serialization function */
   friend class boost::serialization::access;
   template<class ARCHIVE>
@@ -99,9 +103,7 @@ private:
             boost::serialization::base_object<Base>(*this));
     ar & BOOST_SERIALIZATION_NVP(measuredE_);
   }
-
-public:
-  GTSAM_MAKE_ALIGNED_OPERATOR_NEW
+#endif
 };
 // \class EssentialMatrixConstraint
 

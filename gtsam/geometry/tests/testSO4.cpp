@@ -42,9 +42,9 @@ TEST(SO4, Identity) {
 
 //******************************************************************************
 TEST(SO4, Concept) {
-  BOOST_CONCEPT_ASSERT((IsGroup<SO4>));
-  BOOST_CONCEPT_ASSERT((IsManifold<SO4>));
-  BOOST_CONCEPT_ASSERT((IsLieGroup<SO4>));
+  GTSAM_CONCEPT_ASSERT(IsGroup<SO4>);
+  GTSAM_CONCEPT_ASSERT(IsManifold<SO4>);
+  GTSAM_CONCEPT_ASSERT(IsMatrixLieGroup<SO4>);
 }
 
 //******************************************************************************
@@ -147,7 +147,7 @@ TEST(SO4, Invariants) {
 }
 
 //******************************************************************************
-TEST(SO4, compose) {
+TEST(SO4, Compose) {
   SO4 expected = Q1 * Q2;
   Matrix actualH1, actualH2;
   SO4 actual = Q1.compose(Q2, actualH1, actualH2);
@@ -163,39 +163,35 @@ TEST(SO4, compose) {
 }
 
 //******************************************************************************
-TEST(SO4, vec) {
+TEST(SO4, Vec) {
   using Vector16 = SO4::VectorN2;
   const Vector16 expected = Eigen::Map<const Vector16>(Q2.matrix().data());
   Matrix actualH;
   const Vector16 actual = Q2.vec(actualH);
   EXPECT(assert_equal(expected, actual));
-  std::function<Vector16(const SO4&)> f = [](const SO4& Q) { return Q.vec(); };
+  auto f = [](const SO4& Q) { return Q.vec(); };
   const Matrix numericalH = numericalDerivative11(f, Q2, 1e-5);
   EXPECT(assert_equal(numericalH, actualH));
 }
 
 //******************************************************************************
-TEST(SO4, topLeft) {
+TEST(SO4, TopLeft) {
   const Matrix3 expected = Q3.matrix().topLeftCorner<3, 3>();
   Matrix actualH;
   const Matrix3 actual = topLeft(Q3, actualH);
   EXPECT(assert_equal(expected, actual));
-  std::function<Matrix3(const SO4&)> f = [](const SO4& Q3) {
-    return topLeft(Q3);
-  };
+  auto f = [](const SO4& Q3) { return topLeft(Q3); };
   const Matrix numericalH = numericalDerivative11(f, Q3, 1e-5);
   EXPECT(assert_equal(numericalH, actualH));
 }
 
 //******************************************************************************
-TEST(SO4, stiefel) {
+TEST(SO4, Stiefel) {
   const Matrix43 expected = Q3.matrix().leftCols<3>();
   Matrix actualH;
   const Matrix43 actual = stiefel(Q3, actualH);
   EXPECT(assert_equal(expected, actual));
-  std::function<Matrix43(const SO4&)> f = [](const SO4& Q3) {
-    return stiefel(Q3);
-  };
+  auto f = [](const SO4& Q3) { return stiefel(Q3); };
   const Matrix numericalH = numericalDerivative11(f, Q3, 1e-5);
   EXPECT(assert_equal(numericalH, actualH));
 }

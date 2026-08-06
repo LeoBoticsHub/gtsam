@@ -17,7 +17,6 @@
  * @author  Christian Potthast
  */
 
-#include <boost/range/adaptor/map.hpp>
 #include <gtsam/linear/Errors.h>
 #include <gtsam/linear/VectorValues.h>
 
@@ -28,9 +27,9 @@ namespace gtsam {
 /* ************************************************************************* */
 Errors createErrors(const VectorValues& V) {
   Errors result;
-  for (const Vector& e : V | boost::adaptors::map_values) {
-    result.push_back(e);
-  }
+  // Use a key-sorted view of VectorValues so the resulting Errors
+  // order is deterministic and independent of the underlying map.
+  for (const auto& [key, e] : V.sorted()) result.push_back(e);
   return result;
 }
 

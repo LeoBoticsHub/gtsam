@@ -18,12 +18,13 @@
  *  @date   August, 2014
  */
 
+#include <CppUnitLite/TestHarness.h>
+#include <gtsam/base/MatrixConstants.h>
+#include <gtsam/geometry/Pose3.h>
+#include <gtsam/inference/Symbol.h>
+#include <gtsam/slam/BetweenFactor.h>
 #include <gtsam/slam/InitializePose3.h>
 #include <gtsam/slam/dataset.h>
-#include <gtsam/slam/BetweenFactor.h>
-#include <gtsam/inference/Symbol.h>
-#include <gtsam/geometry/Pose3.h>
-#include <CppUnitLite/TestHarness.h>
 
 #include <cmath>
 
@@ -231,10 +232,8 @@ TEST( InitializePose3, orientationsGradient ) {
   //  writeG2o(pose3Graph, givenPoses, g2oFile);
 
   const string matlabResultsfile = findExampleDataFile("simpleGraph10gradIter");
-  NonlinearFactorGraph::shared_ptr matlabGraph;
-  Values::shared_ptr matlabValues;
   bool is3D = true;
-  boost::tie(matlabGraph, matlabValues) = readG2o(matlabResultsfile, is3D);
+  const auto [matlabGraph, matlabValues] = readG2o(matlabResultsfile, is3D);
 
   Rot3 R0Expected = matlabValues->at<Pose3>(1).rotation();
   EXPECT(assert_equal(R0Expected, orientations.at<Rot3>(x0), 1e-4));
@@ -266,10 +265,8 @@ TEST( InitializePose3, posesWithGivenGuess ) {
 /* ************************************************************************* */
 TEST(InitializePose3, initializePoses) {
   const string g2oFile = findExampleDataFile("pose3example-grid");
-  NonlinearFactorGraph::shared_ptr inputGraph;
-  Values::shared_ptr posesInFile;
   bool is3D = true;
-  boost::tie(inputGraph, posesInFile) = readG2o(g2oFile, is3D);
+  const auto [inputGraph, posesInFile] = readG2o(g2oFile, is3D);
 
   auto priorModel = noiseModel::Unit::Create(6);
   inputGraph->addPrior(0, Pose3(), priorModel);

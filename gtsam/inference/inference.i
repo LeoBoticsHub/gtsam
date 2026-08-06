@@ -28,9 +28,9 @@ void PrintKeySet(
 class Symbol {
   Symbol();
   Symbol(char c, uint64_t j);
-  Symbol(size_t key);
+  Symbol(gtsam::Key key);
 
-  size_t key() const;
+  gtsam::Key key() const;
   void print(const string& s = "") const;
   bool equals(const gtsam::Symbol& expected, double tol) const;
 
@@ -39,46 +39,46 @@ class Symbol {
   string string() const;
 };
 
-size_t symbol(char chr, size_t index);
-char symbolChr(size_t key);
-size_t symbolIndex(size_t key);
+gtsam::Key symbol(char chr, size_t index);
+char symbolChr(gtsam::Key key);
+size_t symbolIndex(gtsam::Key key);
 
 namespace symbol_shorthand {
-size_t A(size_t j);
-size_t B(size_t j);
-size_t C(size_t j);
-size_t D(size_t j);
-size_t E(size_t j);
-size_t F(size_t j);
-size_t G(size_t j);
-size_t H(size_t j);
-size_t I(size_t j);
-size_t J(size_t j);
-size_t K(size_t j);
-size_t L(size_t j);
-size_t M(size_t j);
-size_t N(size_t j);
-size_t O(size_t j);
-size_t P(size_t j);
-size_t Q(size_t j);
-size_t R(size_t j);
-size_t S(size_t j);
-size_t T(size_t j);
-size_t U(size_t j);
-size_t V(size_t j);
-size_t W(size_t j);
-size_t X(size_t j);
-size_t Y(size_t j);
-size_t Z(size_t j);
+gtsam::Key A(size_t j);
+gtsam::Key B(size_t j);
+gtsam::Key C(size_t j);
+gtsam::Key D(size_t j);
+gtsam::Key E(size_t j);
+gtsam::Key F(size_t j);
+gtsam::Key G(size_t j);
+gtsam::Key H(size_t j);
+gtsam::Key I(size_t j);
+gtsam::Key J(size_t j);
+gtsam::Key K(size_t j);
+gtsam::Key L(size_t j);
+gtsam::Key M(size_t j);
+gtsam::Key N(size_t j);
+gtsam::Key O(size_t j);
+gtsam::Key P(size_t j);
+gtsam::Key Q(size_t j);
+gtsam::Key R(size_t j);
+gtsam::Key S(size_t j);
+gtsam::Key T(size_t j);
+gtsam::Key U(size_t j);
+gtsam::Key V(size_t j);
+gtsam::Key W(size_t j);
+gtsam::Key X(size_t j);
+gtsam::Key Y(size_t j);
+gtsam::Key Z(size_t j);
 }  // namespace symbol_shorthand
 
 #include <gtsam/inference/LabeledSymbol.h>
 class LabeledSymbol {
-  LabeledSymbol(size_t full_key);
+  LabeledSymbol(gtsam::Key full_key);
   LabeledSymbol(const gtsam::LabeledSymbol& key);
   LabeledSymbol(unsigned char valType, unsigned char label, size_t j);
 
-  size_t key() const;
+  gtsam::Key key() const;
   unsigned char label() const;
   unsigned char chr() const;
   size_t index() const;
@@ -91,10 +91,23 @@ class LabeledSymbol {
   void print(string s = "") const;
 };
 
-size_t mrsymbol(unsigned char c, unsigned char label, size_t j);
-unsigned char mrsymbolChr(size_t key);
-unsigned char mrsymbolLabel(size_t key);
-size_t mrsymbolIndex(size_t key);
+gtsam::Key mrsymbol(unsigned char c, unsigned char label, size_t j);
+unsigned char mrsymbolChr(gtsam::Key key);
+unsigned char mrsymbolLabel(gtsam::Key key);
+size_t mrsymbolIndex(gtsam::Key key);
+
+#include <gtsam/inference/EdgeKey.h>
+class EdgeKey {
+  EdgeKey(std::uint32_t i, std::uint32_t j);
+  EdgeKey(gtsam::Key key);
+  EdgeKey(const gtsam::EdgeKey& key);
+
+  std::uint32_t i() const;
+  std::uint32_t j() const;
+  gtsam::Key key() const;
+
+  void print(string s = "") const;
+};
 
 #include <gtsam/inference/Ordering.h>
 class Ordering {
@@ -107,13 +120,20 @@ class Ordering {
   Ordering(const std::vector<size_t>& keys);
 
   template <
-      FACTOR_GRAPH = {gtsam::NonlinearFactorGraph, gtsam::DiscreteFactorGraph,
-                      gtsam::SymbolicFactorGraph, gtsam::GaussianFactorGraph, gtsam::HybridGaussianFactorGraph}>
+      FACTOR_GRAPH = {gtsam::NonlinearFactorGraph,
+                      gtsam::DiscreteFactorGraph,
+                      gtsam::SymbolicFactorGraph,
+                      gtsam::GaussianFactorGraph,
+                      gtsam::HybridGaussianFactorGraph}>
   static gtsam::Ordering Colamd(const FACTOR_GRAPH& graph);
+  static gtsam::Ordering Colamd(const gtsam::VariableIndex& variableIndex);
 
   template <
-      FACTOR_GRAPH = {gtsam::NonlinearFactorGraph, gtsam::DiscreteFactorGraph,
-                      gtsam::SymbolicFactorGraph, gtsam::GaussianFactorGraph, gtsam::HybridGaussianFactorGraph}>
+      FACTOR_GRAPH = {gtsam::NonlinearFactorGraph,
+                      gtsam::DiscreteFactorGraph,
+                      gtsam::SymbolicFactorGraph,
+                      gtsam::GaussianFactorGraph,
+                      gtsam::HybridGaussianFactorGraph}>
   static gtsam::Ordering ColamdConstrainedLast(
       const FACTOR_GRAPH& graph, const gtsam::KeyVector& constrainLast,
       bool forceOrder = false);
@@ -128,7 +148,7 @@ class Ordering {
   template <
       FACTOR_GRAPH = {gtsam::NonlinearFactorGraph, gtsam::DiscreteFactorGraph,
                       gtsam::SymbolicFactorGraph, gtsam::GaussianFactorGraph, gtsam::HybridGaussianFactorGraph}>
-  static gtsam::Ordering Natural(const FACTOR_GRAPH& graph);
+  static gtsam::Ordering Natural(const FACTOR_GRAPH& fg);
 
   template <
       FACTOR_GRAPH = {gtsam::NonlinearFactorGraph, gtsam::DiscreteFactorGraph,
@@ -144,12 +164,12 @@ class Ordering {
   // Testable
   void print(string s = "", const gtsam::KeyFormatter& keyFormatter =
                                 gtsam::DefaultKeyFormatter) const;
-  bool equals(const gtsam::Ordering& ord, double tol) const;
+  bool equals(const gtsam::Ordering& other, double tol) const;
 
   // Standard interface
   size_t size() const;
   size_t at(size_t i) const;
-  void push_back(size_t key);
+  void push_back(gtsam::Key key);
 
   // enabling serialization functionality
   void serialize() const;
@@ -169,7 +189,7 @@ class DotWriter {
 
   std::map<gtsam::Key, gtsam::Vector2> variablePositions;
   std::map<char, double> positionHints;
-  std::set<gtsam::Key> boxes;
+  gtsam::KeySet boxes;
   std::map<size_t, gtsam::Vector2> factorPositions;
 };
 
@@ -177,14 +197,13 @@ class DotWriter {
 class VariableIndex {
   // Standard Constructors and Named Constructors
   VariableIndex();
-  // TODO: Templetize constructor when wrap supports it
-  // template<T = {gtsam::FactorGraph}>
-  // VariableIndex(const T& factorGraph, size_t nVariables);
-  // VariableIndex(const T& factorGraph);
-  VariableIndex(const gtsam::SymbolicFactorGraph& sfg);
-  VariableIndex(const gtsam::GaussianFactorGraph& gfg);
-  VariableIndex(const gtsam::NonlinearFactorGraph& fg);
+  template <T = {gtsam::SymbolicFactorGraph, gtsam::GaussianFactorGraph,
+                 gtsam::NonlinearFactorGraph}>
+  VariableIndex(const T& factorGraph);
   VariableIndex(const gtsam::VariableIndex& other);
+
+  gtsam::FactorIndices& at(gtsam::Key variable) const;
+  bool empty(gtsam::Key variable) const;
 
   // Testable
   bool equals(const gtsam::VariableIndex& other, double tol) const;

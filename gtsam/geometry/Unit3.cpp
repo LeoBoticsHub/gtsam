@@ -117,8 +117,8 @@ const Matrix32& Unit3::basis(OptionalJacobian<6, 2> H) const {
       jacobian.block<3, 2>(3, 0) = H_b2_n * H_n_p + H_b2_b1 * H_b1_p;
 
       // Cache the result and jacobian
-      H_B_.reset(jacobian);
-      B_.reset(B);
+      H_B_ = (jacobian);
+      B_ = (B);
     }
 
     // Return cached jacobian, possibly computed just above
@@ -134,7 +134,7 @@ const Matrix32& Unit3::basis(OptionalJacobian<6, 2> H) const {
     const Point3 B1 = gtsam::cross(n, axis);
     B.col(0) = normalize(B1);
     B.col(1) = gtsam::cross(n, B.col(0));
-    B_.reset(B);
+    B_ = (B);
   }
 
   return *B_;
@@ -166,8 +166,41 @@ void Unit3::print(const std::string& s) const {
 }
 
 /* ************************************************************************* */
-Matrix3 Unit3::skew() const {
-  return skewSymmetric(p_.x(), p_.y(), p_.z());
+Matrix3 Unit3::skew() const { return skewSymmetric(p_.x(), p_.y(), p_.z()); }
+
+/* ************************************************************************* */
+Unit3 Unit3::cross(const Unit3& q, OptionalJacobian<2, 2> H1,
+                   OptionalJacobian<2, 2> H2) const {
+  Matrix23 H;
+  const auto result = Unit3::FromPoint3(gtsam::cross(p_, q.p_), H);
+  if (H1) *H1 << -H * q.skew() * basis();
+  if (H2) *H2 << H * skew() * q.basis();
+  return result;
+}
+
+Point3 Unit3::cross(const Point3& q, OptionalJacobian<3, 2> H1,
+                    OptionalJacobian<3, 3> H2) const {
+  if (H1) *H1 = -skewSymmetric(q) * basis();
+  if (H2) *H2 = skew();
+  return gtsam::cross(p_, q);
+}
+
+/* ************************************************************************* */
+Unit3 cross(const Unit3& p, const Unit3& q, OptionalJacobian<2, 2> H1,
+            OptionalJacobian<2, 2> H2) {
+  return p.cross(q, H1, H2);
+}
+
+Point3 cross(const Unit3& p, const Point3& q, OptionalJacobian<3, 2> H1,
+             OptionalJacobian<3, 3> H2) {
+  return p.cross(q, H1, H2);
+}
+
+Point3 cross(const Point3& p, const Unit3& q, OptionalJacobian<3, 3> H1,
+             OptionalJacobian<3, 2> H2) {
+  if (H1) *H1 = -q.skew();
+  if (H2) *H2 = skewSymmetric(p) * q.basis();
+  return cross(p, q.point3());
 }
 
 /* ************************************************************************* */
@@ -196,16 +229,6 @@ double Unit3::dot(const Unit3& q, OptionalJacobian<1, 2> H_p,
 }
 
 /* ************************************************************************* */
-Vector2 Unit3::error(const Unit3& q, OptionalJacobian<2, 2> H_q) const {
-  // 2D error is equal to B'*q, as B is 3x2 matrix and q is 3x1
-  const Vector2 xi = basis().transpose() * q.p_;
-  if (H_q) {
-    *H_q = basis().transpose() * q.basis();
-  }
-  return xi;
-}
-
-/* ************************************************************************* */
 Vector2 Unit3::errorVector(const Unit3& q, OptionalJacobian<2, 2> H_p,
                            OptionalJacobian<2, 2> H_q) const {
   // Get the point3 of this, and the derivative.
@@ -222,20 +245,14 @@ Vector2 Unit3::errorVector(const Unit3& q, OptionalJacobian<2, 2> H_p,
     const Matrix32& H_b1_p = H_B_p.block<3, 2>(0, 0);
     const Matrix32& H_b2_p = H_B_p.block<3, 2>(3, 0);
 
-    // Derivatives of the two entries of xi wrt the basis vectors.
-    const Matrix13 H_xi1_b1 = qn.transpose();
-    const Matrix13 H_xi2_b2 = qn.transpose();
-
+    // dxi/dB = qn.transpose();
     // Assemble dxi/dp = dxi/dB * dB/dp.
-    const Matrix12 H_xi1_p = H_xi1_b1 * H_b1_p;
-    const Matrix12 H_xi2_p = H_xi2_b2 * H_b2_p;
-    *H_p << H_xi1_p, H_xi2_p;
+    *H_p << qn.transpose() * H_b1_p, qn.transpose() * H_b2_p;
   }
 
   if (H_q) {
     // dxi/dq is given by dxi/dqu * dqu/dq, where qu is the unit vector of q.
-    const Matrix23 H_xi_qu = Bt;
-    *H_q = H_xi_qu * H_qn_q;
+    *H_q = Bt * H_qn_q;
   }
 
   return xi;
@@ -244,7 +261,7 @@ Vector2 Unit3::errorVector(const Unit3& q, OptionalJacobian<2, 2> H_p,
 /* ************************************************************************* */
 double Unit3::distance(const Unit3& q, OptionalJacobian<1, 2> H) const {
   Matrix2 H_xi_q;
-  const Vector2 xi = error(q, H ? &H_xi_q : nullptr);
+  const Vector2 xi = errorVector(q, {}, H ? &H_xi_q : nullptr);
   const double theta = xi.norm();
   if (H)
     *H = (xi.transpose() / theta) * H_xi_q;

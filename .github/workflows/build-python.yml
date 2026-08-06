@@ -1,9 +1,47 @@
 name: Python CI
 
-on: [pull_request]
+# Since this is a required check, specify paths-ignore in the check-paths job
+# instead of under 'pull_request:'. Otherwise, the check is still required but
+# never runs, and a maintainer must bypass the check in order to merge the PR.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths-ignore:
+      - "**.md"
+      - "**.ipynb"
+      - "myst.yml"
+
+# Every time you make a push to your PR, it cancel immediately the previous checks,
+# and start a new one. The other runner will be available more quickly to your PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
+  # Check paths of changed files to see if any are non-ignored.
+  check-paths:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.filter.outputs.relevant_changes }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Check modified files
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            relevant_changes:
+              - '!**.md'
+              - '!**.ipynb' 
+              - '!myst.yml'
+
   build:
+    # Only run build if relevant files have been modified in this PR.
+    needs: check-paths
+    if: needs.check-paths.outputs.should_run == 'true'
+
     name: ${{ matrix.name }} ${{ matrix.build_type }} Python ${{ matrix.python_version }}
     runs-on: ${{ matrix.os }}
 
@@ -12,60 +50,55 @@ jobs:
       CTEST_PARALLEL_LEVEL: 2
       CMAKE_BUILD_TYPE: ${{ matrix.build_type }}
       PYTHON_VERSION: ${{ matrix.python_version }}
+      BOOST_VERSION: 1.72.0
+      BOOST_EXE: boost_1_72_0-msvc-14.2
+      SCCACHE_GHA_ENABLED: ON
 
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         # Github Actions requires a single row to be added to the build matrix.
         # See https://help.github.com/en/articles/workflow-syntax-for-github-actions.
-        name: [
-          ubuntu-20.04-gcc-7,
-          ubuntu-20.04-gcc-9,
-          ubuntu-20.04-clang-9,
-          macOS-11-xcode-13.4.1,
-          ubuntu-20.04-gcc-7-tbb,
-        ]
+        name:
+          [
+            ubuntu-22.04-gcc-11,
+            ubuntu-22.04-gcc-11-noboost,
+            ubuntu-22.04-clang-11,
+            macos-15-xcode-16,
+            windows-2022-msvc,
+          ]
 
-        build_type: [Debug, Release]
+        build_type: [Release]
         python_version: [3]
         include:
-          - name: ubuntu-20.04-gcc-7
-            os: ubuntu-20.04
+          - name: ubuntu-22.04-gcc-11
+            os: ubuntu-22.04
             compiler: gcc
-            version: "7"
+            version: "11"
 
-          - name: ubuntu-20.04-gcc-9
-            os: ubuntu-20.04
+          - name: ubuntu-22.04-gcc-11-noboost
+            os: ubuntu-22.04
             compiler: gcc
-            version: "9"
+            version: "11"
 
-          - name: ubuntu-20.04-clang-9
-            os: ubuntu-20.04
+          - name: ubuntu-22.04-clang-11
+            os: ubuntu-22.04
             compiler: clang
-            version: "9"
+            version: "11"
 
-          # NOTE temporarily added this as it is a required check.
-          - name: ubuntu-20.04-clang-9
-            os: ubuntu-20.04
-            compiler: clang
-            version: "9"
-            build_type: Debug
-            python_version: "3"
-
-          - name: macOS-11-xcode-13.4.1
-            os: macOS-11
+          - name: macos-15-xcode-16
+            os: macos-15
             compiler: xcode
-            version: "13.4.1"
+            version: "16"
 
-          - name: ubuntu-20.04-gcc-7-tbb
-            os: ubuntu-20.04
-            compiler: gcc
-            version: "7"
-            flag: tbb
+          - name: windows-2022-msvc
+            os: windows-2022
+            platform: 64
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
+
       - name: Install (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -81,8 +114,12 @@ jobs:
           fi
 
           sudo apt-get -y update
-          sudo apt-get -y install cmake build-essential pkg-config libpython3-dev python3-numpy libboost-all-dev
-          
+          if [ "${{ matrix.name }}" = "ubuntu-22.04-gcc-11-noboost" ]; then
+            sudo apt-get -y install build-essential pkg-config libpython3-dev python3-numpy
+          else
+            sudo apt-get -y install build-essential pkg-config libpython3-dev python3-numpy libboost-all-dev
+          fi
+
           if [ "${{ matrix.compiler }}" = "gcc" ]; then
             sudo apt-get install -y g++-${{ matrix.version }} g++-${{ matrix.version }}-multilib
             echo "CC=gcc-${{ matrix.version }}" >> $GITHUB_ENV
@@ -92,37 +129,123 @@ jobs:
             echo "CC=clang-${{ matrix.version }}" >> $GITHUB_ENV
             echo "CXX=clang++-${{ matrix.version }}" >> $GITHUB_ENV
           fi
+
       - name: Install (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew tap ProfFan/robotics
-          brew install cmake ninja
-          brew install boost
-          if [ "${{ matrix.compiler }}" = "gcc" ]; then
-            brew install gcc@${{ matrix.version }}
-            echo "CC=gcc-${{ matrix.version }}" >> $GITHUB_ENV
-            echo "CXX=g++-${{ matrix.version }}" >> $GITHUB_ENV
-          else
-            sudo xcode-select -switch /Applications/Xcode.app
-            echo "CC=clang" >> $GITHUB_ENV
-            echo "CXX=clang++" >> $GITHUB_ENV
-          fi
+          brew update
+          # Install boost only if missing
+          brew list boost >/dev/null 2>&1 || brew install boost
+          sudo xcode-select -switch /Applications/Xcode.app
+          echo "CC=clang" >> $GITHUB_ENV
+          echo "CXX=clang++" >> $GITHUB_ENV
+
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x${{matrix.platform}}
+          toolset: 14.40
+
+      - name: cl version (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: cl
+
+      - name: Setup python (Windows)
+        uses: actions/setup-python@v5
+        if: runner.os == 'Windows'
+        with:
+          python-version: ${{ matrix.python_version }}
+
+      - name: Install Boost (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          choco install boost-msvc-14.2 --yes --no-progress
+
+          # Try common Chocolatey install roots for Boost
+          $candidates = @(
+            "C:\local\boost_*",
+            "C:\ProgramData\chocolatey\lib\boost-msvc-14.2\tools\boost_*",
+            "C:\ProgramData\chocolatey\lib\boost-msvc-14.2\**\boost_*"
+          )
+
+          $boostRoot = $null
+          foreach ($pattern in $candidates) {
+            $match = Get-ChildItem -Path $pattern -Directory -ErrorAction SilentlyContinue |
+              Sort-Object FullName -Descending |
+              Select-Object -First 1
+            if ($match) { $boostRoot = $match.FullName; break }
+          }
+
+          if (-not $boostRoot) {
+            throw "Boost installed but root directory was not found in expected locations."
+          }
+
+          "BOOST_ROOT=$boostRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Using BOOST_ROOT=$boostRoot"
+    
+      - name: Install sccache
+        if: runner.os == 'Windows'
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Set GTSAM_WITH_TBB Flag
         if: matrix.flag == 'tbb'
         run: |
           echo "GTSAM_WITH_TBB=ON" >> $GITHUB_ENV
           echo "GTSAM Uses TBB"
-      - name: Set Swap Space
+
+      - name: Set Swap Space (Linux)
         if: runner.os == 'Linux'
         uses: pierotofy/set-swap-space@master
         with:
           swap-size-gb: 6
-      - name: Install Dependencies
+
+      - name: Install System Dependencies (Linux, macOS)
+        if: runner.os != 'Windows'
         run: |
           bash .github/scripts/python.sh -d
+
+      - name: Create virtual on MacOS
+        if: runner.os == 'macOS'
+        run: |
+          python$PYTHON_VERSION -m venv venv
+          source venv/bin/activate
+          echo "PATH=$(pwd)/venv/bin:$PATH" >> $GITHUB_ENV
+          python -m pip install --upgrade pip
+
+      - name: Install Python Dependencies
+        shell: bash
+        run: python$PYTHON_VERSION -m pip install -r python/dev_requirements.txt
+
       - name: Build
+        shell: bash
+        if: matrix.name != 'ubuntu-22.04-gcc-11-noboost' && matrix.name != 'windows-2022-msvc'
         run: |
           bash .github/scripts/python.sh -b
+
+      - name: Build
+        shell: bash
+        if: matrix.name == 'windows-2022-msvc'
+        run: |
+          bash .github/scripts/python.sh -b --sccache
+
+      - name: Build (No Boost Wrapper Check)
+        if: matrix.name == 'ubuntu-22.04-gcc-11-noboost'
+        shell: bash
+        run: |
+          bash .github/scripts/python.sh -b --no-boost
+
       - name: Test
+        shell: bash
+        if: matrix.name != 'ubuntu-22.04-gcc-11-noboost'
         run: |
           bash .github/scripts/python.sh -t
+
+      - name: Test (No Boost Wrapper Check)
+        if: matrix.name == 'ubuntu-22.04-gcc-11-noboost'
+        shell: bash
+        run: |
+          bash .github/scripts/python.sh -t --no-boost

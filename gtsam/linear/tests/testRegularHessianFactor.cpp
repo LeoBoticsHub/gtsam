@@ -15,11 +15,11 @@
  * @date    March 4, 2014
  */
 
-#include <gtsam/linear/RegularHessianFactor.h>
-#include <gtsam/linear/GaussianFactorGraph.h>
-#include <gtsam/linear/VectorValues.h>
-
 #include <CppUnitLite/TestHarness.h>
+#include <gtsam/base/MatrixConstants.h>
+#include <gtsam/linear/GaussianFactorGraph.h>
+#include <gtsam/linear/RegularHessianFactor.h>
+#include <gtsam/linear/VectorValues.h>
 
 using namespace std;
 using namespace gtsam;
@@ -66,11 +66,11 @@ TEST(RegularHessianFactor, Constructors)
 
   // Test constructor from Gaussian Factor Graph
   GaussianFactorGraph gfg;
-  gfg += jf;
+  gfg.push_back(jf);
   RegularHessianFactor<2> factor4(gfg);
   EXPECT(assert_equal(factor, factor4));
   GaussianFactorGraph gfg2;
-  gfg2 += factor;
+  gfg2.push_back(factor);
   RegularHessianFactor<2> factor5(gfg);
   EXPECT(assert_equal(factor, factor5));
 

@@ -17,22 +17,25 @@
  * @author  Varun Agrawal
  */
 
+#include <CppUnitLite/TestHarness.h>
+#include <gtsam/base/MatrixConstants.h>
+#include <gtsam/base/Testable.h>
+#include <gtsam/base/VectorConstants.h>
+#include <gtsam/base/lieProxies.h>
+#include <gtsam/base/numericalDerivative.h>
+#include <gtsam/base/testLie.h>
 #include <gtsam/geometry/Point3.h>
 #include <gtsam/geometry/Rot3.h>
-#include <gtsam/base/testLie.h>
-#include <gtsam/base/Testable.h>
-#include <gtsam/base/numericalDerivative.h>
-#include <gtsam/base/lieProxies.h>
 
-#include <boost/math/constants/constants.hpp>
-
-#include <CppUnitLite/TestHarness.h>
+#include <array>
+#include <iomanip>
+#include <sstream>
 
 using namespace std;
 using namespace gtsam;
 
 GTSAM_CONCEPT_TESTABLE_INST(Rot3)
-GTSAM_CONCEPT_LIE_INST(Rot3)
+GTSAM_CONCEPT_MATRIX_LIE_GROUP_INST(Rot3)
 
 static Rot3 R = Rot3::Rodrigues(0.1, 0.4, 0.2);
 static Point3 P(0.2, 0.7, -2.0);
@@ -40,9 +43,9 @@ static double error = 1e-9, epsilon = 0.001;
 
 //******************************************************************************
 TEST(Rot3 , Concept) {
-  BOOST_CONCEPT_ASSERT((IsGroup<Rot3 >));
-  BOOST_CONCEPT_ASSERT((IsManifold<Rot3 >));
-  BOOST_CONCEPT_ASSERT((IsLieGroup<Rot3 >));
+  GTSAM_CONCEPT_ASSERT(IsGroup<Rot3 >);
+  GTSAM_CONCEPT_ASSERT(IsManifold<Rot3 >);
+  GTSAM_CONCEPT_ASSERT(IsMatrixLieGroup<Rot3 >);
 }
 
 /* ************************************************************************* */
@@ -128,10 +131,8 @@ TEST( Rot3, AxisAngle2)
   // constructor from a rotation matrix, as doubles in *row-major* order.
   Rot3 R1(-0.999957, 0.00922903, 0.00203116, 0.00926964, 0.999739, 0.0208927, -0.0018374, 0.0209105, -0.999781);
   
-  Unit3 actualAxis;
-  double actualAngle;
   // convert Rot3 to quaternion using GTSAM
-  std::tie(actualAxis, actualAngle) = R1.axisAngle();
+  const auto [actualAxis, actualAngle] = R1.axisAngle();
   
   double expectedAngle = 3.1396582;
   CHECK(assert_equal(expectedAngle, actualAngle, 1e-5));
@@ -188,16 +189,69 @@ TEST( Rot3, retract)
 {
   Vector v = Z_3x1;
   CHECK(assert_equal(R, R.retract(v)));
+}
 
-//  // test Canonical coordinates
-//  Canonical<Rot3> chart;
-//  Vector v2 = chart.local(R);
-//  CHECK(assert_equal(R, chart.retract(v2)));
+/* ************************************************************************* */
+namespace {
+
+struct RetractNormalizationMetrics {
+  double quaternionNormError;
+  double orthogonalityError;
+  double determinantError;
+};
+
+RetractNormalizationMetrics measureRetractNormalization(
+    const Rot3& base, const Vector3& omega) {
+  const Rot3 retracted = base.retract(omega);
+  const Matrix3 matrix = retracted.matrix();
+  return {std::abs(retracted.toQuaternion().norm() - 1.0),
+          (matrix.transpose() * matrix - I_3x3).norm(),
+          std::abs(matrix.determinant() - 1.0)};
+}
+
+}  // namespace
+
+TEST(Rot3, retractNormalizationAcrossMagnitudes) {
+  const Vector3 direction = Vector3(1.0, -2.0, 3.0).normalized();
+  const std::array<Rot3, 2> bases = {
+      Rot3(),
+      Rot3::RzRyRx(0.3, -0.2, 0.5),
+  };
+  const std::array<double, 17> magnitudes = {
+      0.0, 1e-16, 1e-14, 1e-12, 1e-10, 1e-8, 1e-6, 1e-4, 1e-2,
+      1.0, 1e2,   1e4,   1e6,   1e8,   1e10, 1e12, 1e14,
+  };
+  const double quaternionNormTolerance = 1e-12;
+  const double orthogonalityTolerance = 1e-10;
+  const double determinantTolerance = 1e-10;
+
+  for (size_t baseIndex = 0; baseIndex < bases.size(); ++baseIndex) {
+    for (const double magnitude : magnitudes) {
+      const auto metrics =
+          measureRetractNormalization(bases[baseIndex], direction * magnitude);
+      const bool quaternionOk =
+          metrics.quaternionNormError <= quaternionNormTolerance;
+      const bool orthogonalityOk =
+          metrics.orthogonalityError <= orthogonalityTolerance;
+      const bool determinantOk =
+          metrics.determinantError <= determinantTolerance;
+      if (quaternionOk && orthogonalityOk && determinantOk) continue;
+
+      std::ostringstream os;
+      os << std::scientific << std::setprecision(3)
+         << "Retract normalization broke down for base[" << baseIndex
+         << "] at |omega|=" << magnitude
+         << " with quaternion norm error=" << metrics.quaternionNormError
+         << ", orthogonality error=" << metrics.orthogonalityError
+         << ", determinant error=" << metrics.determinantError;
+      FAIL(os.str());
+    }
+  }
 }
 
 /* ************************************************************************* */
 TEST( Rot3, log) {
-  static const double PI = boost::math::constants::pi<double>();
+  static const double PI = std::acos(-1.0);
   Vector w;
   Rot3 R;
 
@@ -329,6 +383,34 @@ TEST(Rot3, manifold_expmap)
 }
 
 /* ************************************************************************* */
+TEST(Rot3, HatAndVee) {
+  // Create a few test vectors
+  Vector3 v1(1, 2, 3);
+  Vector3 v2(0.1, -0.5, 1.0);
+  Vector3 v3(0.0, 0.0, 0.0);
+
+  // Test that Vee(Hat(v)) == v for various inputs
+  EXPECT(assert_equal(v1, Rot3::Vee(Rot3::Hat(v1))));
+  EXPECT(assert_equal(v2, Rot3::Vee(Rot3::Hat(v2))));
+  EXPECT(assert_equal(v3, Rot3::Vee(Rot3::Hat(v3))));
+
+  // Check the structure of the Lie Algebra element
+  Matrix3 expected;
+  expected << 0, -3, 2,
+    3, 0, -1,
+    -2, 1, 0;
+
+  EXPECT(assert_equal(expected, Rot3::Hat(v1)));
+}
+
+/* ************************************************************************* */
+// Checks correct exponential map (Expmap) with brute force matrix exponential
+TEST(Rot3, BruteForceExpmap) {
+  const Vector3 xi(0.1, 0.2, 0.3);
+  EXPECT(assert_equal(Rot3::Expmap(xi), expm<Rot3>(xi), 1e-6));
+}
+
+/* ************************************************************************* */
 class AngularVelocity : public Vector3 {
  public:
   template <typename Derived>
@@ -360,7 +442,7 @@ TEST( Rot3, rotate_derivatives)
 {
   Matrix actualDrotate1a, actualDrotate1b, actualDrotate2;
   R.rotate(P, actualDrotate1a, actualDrotate2);
-  R.inverse().rotate(P, actualDrotate1b, boost::none);
+  R.inverse().rotate(P, actualDrotate1b, {});
   Matrix numerical1 = numericalDerivative21(testing::rotate<Rot3,Point3>, R, P);
   Matrix numerical2 = numericalDerivative21(testing::rotate<Rot3,Point3>, R.inverse(), P);
   Matrix numerical3 = numericalDerivative22(testing::rotate<Rot3,Point3>, R, P);
@@ -508,11 +590,9 @@ TEST( Rot3, yaw_pitch_roll )
 TEST( Rot3, RQ)
 {
   // Try RQ on a pure rotation
-  Matrix actualK;
-  Vector actual;
-  boost::tie(actualK, actual) = RQ(R.matrix());
+  const auto [actualK, actual] = RQ(R.matrix());
   Vector expected = Vector3(0.14715, 0.385821, 0.231671);
-  CHECK(assert_equal(I_3x3,actualK));
+  CHECK(assert_equal(I_3x3, (Matrix)actualK));
   CHECK(assert_equal(expected,actual,1e-6));
 
   // Try using xyz call, asserting that Rot3::RzRyRx(x,y,z).xyz()==[x;y;z]
@@ -531,9 +611,9 @@ TEST( Rot3, RQ)
   // Try RQ to recover calibration from 3*3 sub-block of projection matrix
   Matrix K = (Matrix(3, 3) << 500.0, 0.0, 320.0, 0.0, 500.0, 240.0, 0.0, 0.0, 1.0).finished();
   Matrix A = K * R.matrix();
-  boost::tie(actualK, actual) = RQ(A);
-  CHECK(assert_equal(K,actualK));
-  CHECK(assert_equal(expected,actual,1e-6));
+  const auto [actualK2, actual2] = RQ(A);
+  CHECK(assert_equal(K, actualK2));
+  CHECK(assert_equal(expected, actual2, 1e-6));
 }
 
 /* ************************************************************************* */
@@ -601,6 +681,25 @@ TEST(Rot3, quaternion) {
 
   EXPECT(assert_equal(expected1, actual1));
   EXPECT(assert_equal(expected2, actual2));
+}
+
+/* ************************************************************************* */
+TEST(Rot3, ConvertQuaternion) {
+  Eigen::Quaterniond eigenQuaternion;
+  eigenQuaternion.w() = 1.0;
+  eigenQuaternion.x() = 2.0;
+  eigenQuaternion.y() = 3.0;
+  eigenQuaternion.z() = 4.0;
+  EXPECT_DOUBLES_EQUAL(1, eigenQuaternion.w(), 1e-9);
+  EXPECT_DOUBLES_EQUAL(2, eigenQuaternion.x(), 1e-9);
+  EXPECT_DOUBLES_EQUAL(3, eigenQuaternion.y(), 1e-9);
+  EXPECT_DOUBLES_EQUAL(4, eigenQuaternion.z(), 1e-9);
+
+  Rot3 R(eigenQuaternion);
+  EXPECT_DOUBLES_EQUAL(1, R.toQuaternion().w(), 1e-9);
+  EXPECT_DOUBLES_EQUAL(2, R.toQuaternion().x(), 1e-9);
+  EXPECT_DOUBLES_EQUAL(3, R.toQuaternion().y(), 1e-9);
+  EXPECT_DOUBLES_EQUAL(4, R.toQuaternion().z(), 1e-9);
 }
 
 /* ************************************************************************* */
@@ -944,9 +1043,48 @@ TEST(Rot3, determinant) {
 }
 
 /* ************************************************************************* */
+TEST(Rot3, ExpmapChainRule) {
+  // Multiply with an arbitrary matrix and exponentiate
+  Matrix3 M;
+  M << 1, 2, 3, 4, 5, 6, 7, 8, 9;
+  auto g = [&](const Vector3& omega) {
+    return Rot3::Expmap(M*omega);
+  };
+
+  // Test the derivatives at zero
+  const Matrix3 expected = numericalDerivative11<Rot3, Vector3>(g, Z_3x1);
+  EXPECT(assert_equal<Matrix3>(expected, M, 1e-5)); // SO3::ExpmapDerivative(Z_3x1) is identity
+
+  // Test the derivatives at another value
+  const Vector3 delta{0.1,0.2,0.3};
+  const Matrix3 expected2 = numericalDerivative11<Rot3, Vector3>(g, delta);
+  EXPECT(assert_equal<Matrix3>(expected2, SO3::ExpmapDerivative(M*delta) * M, 1e-5));
+}
+
+/* ************************************************************************* */
+TEST(Rot3, expmapChainRule) {
+  // Multiply an arbitrary rotation with exp(M*x)
+  // Perhaps counter-intuitively, this has the same derivatives as above
+  Matrix3 M;
+  M << 1, 2, 3, 4, 5, 6, 7, 8, 9;
+  const Rot3 R = Rot3::Expmap({1, 2, 3});
+  auto g = [&](const Vector3& omega) {
+    return R.expmap(M*omega);
+  };
+
+  // Test the derivatives at zero
+  const Matrix3 expected = numericalDerivative11<Rot3, Vector3>(g, Z_3x1);
+  EXPECT(assert_equal<Matrix3>(expected, M, 1e-5));
+
+  // Test the derivatives at another value
+  const Vector3 delta{0.1,0.2,0.3};
+  const Matrix3 expected2 = numericalDerivative11<Rot3, Vector3>(g, delta);
+  EXPECT(assert_equal<Matrix3>(expected2, SO3::ExpmapDerivative(M*delta) * M, 1e-5));
+}
+
+/* ************************************************************************* */
 int main() {
   TestResult tr;
   return TestRegistry::runAllTests(tr);
 }
 /* ************************************************************************* */
-

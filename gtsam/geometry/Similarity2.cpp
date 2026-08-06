@@ -16,6 +16,7 @@
  */
 
 #include <gtsam/base/Manifold.h>
+#include <gtsam/base/MatrixConstants.h>
 #include <gtsam/geometry/Pose2.h>
 #include <gtsam/geometry/Rot3.h>
 #include <gtsam/geometry/Similarity2.h>
@@ -31,9 +32,9 @@ namespace internal {
 static Point2Pairs SubtractCentroids(const Point2Pairs& abPointPairs,
                                      const Point2Pair& centroids) {
   Point2Pairs d_abPointPairs;
-  for (const Point2Pair& abPair : abPointPairs) {
-    Point2 da = abPair.first - centroids.first;
-    Point2 db = abPair.second - centroids.second;
+  for (const auto& [a, b] : abPointPairs) {
+    Point2 da = a - centroids.first;
+    Point2 db = b - centroids.second;
     d_abPointPairs.emplace_back(da, db);
   }
   return d_abPointPairs;
@@ -43,10 +44,8 @@ static Point2Pairs SubtractCentroids(const Point2Pairs& abPointPairs,
 static double CalculateScale(const Point2Pairs& d_abPointPairs,
                              const Rot2& aRb) {
   double x = 0, y = 0;
-  Point2 da, db;
 
-  for (const Point2Pair& d_abPair : d_abPointPairs) {
-    std::tie(da, db) = d_abPair;
+  for (const auto& [da, db] : d_abPointPairs) {
     const Vector2 da_prime = aRb * db;
     y += da.transpose() * da_prime;
     x += da_prime.transpose() * da_prime;
@@ -58,8 +57,8 @@ static double CalculateScale(const Point2Pairs& d_abPointPairs,
 /// Form outer product H.
 static Matrix2 CalculateH(const Point2Pairs& d_abPointPairs) {
   Matrix2 H = Z_2x2;
-  for (const Point2Pair& d_abPair : d_abPointPairs) {
-    H += d_abPair.first * d_abPair.second.transpose();
+  for (const auto& [da, db] : d_abPointPairs) {
+    H += da * db.transpose();
   }
   return H;
 }
@@ -186,9 +185,7 @@ Similarity2 Similarity2::Align(const Pose2Pairs& abPosePairs) {
   abPointPairs.reserve(n);
   // Below denotes the pose of the i'th object/camera/etc
   // in frame "a" or frame "b".
-  Pose2 aTi, bTi;
-  for (const Pose2Pair& abPair : abPosePairs) {
-    std::tie(aTi, bTi) = abPair;
+  for (const auto& [aTi, bTi] : abPosePairs) {
     const Rot2 aRb = aTi.rotation().compose(bTi.rotation().inverse());
     rotations.emplace_back(aRb);
     abPointPairs.emplace_back(aTi.translation(), bTi.translation());
@@ -198,13 +195,61 @@ Similarity2 Similarity2::Align(const Pose2Pairs& abPosePairs) {
   return internal::AlignGivenR(abPointPairs, aRb_estimate);
 }
 
+Matrix2 Similarity2::GetV(double theta, double lambda) {
+  // Derivation from https://ethaneade.com/lie_groups.pdf page 6
+  const double lambda2 = lambda * lambda, theta2 = theta * theta;
+
+  // SE(2) or near-SE(2) case  (|λ| tiny)
+  if (std::abs(lambda) < 1e-9) {
+    double A, B;
+    if (theta2 > 1e-9) {
+      A = sin(theta) / theta;
+      B = (1 - cos(theta)) / theta2;
+    }
+    else {                    // θ ≈ 0  →  series
+      A = 1.0 - theta2 / 6.0;
+      B = 0.5 - theta2 / 24.0;
+    }
+    Matrix2 V;
+    V << A, -theta * B,
+      theta* B, A;
+    return V;
+  }
+
+  // general Sim(2) case
+  const double d2 = lambda2 + theta2;
+  if (d2 < 1e-15)               // both tiny → identity
+    return Matrix2::Identity();
+
+  // rotation scalars (unchanged)
+  double A, B, C;
+  if (theta2 > 1e-9) {
+    A = sin(theta) / theta;
+    B = (1 - cos(theta)) / theta2;
+    C = (1 - A) / theta2;
+  } else {  // θ series
+    A = 1.0 - theta2 / 6.0;
+    B = 0.5 - theta2 / 24.0;
+    C = 1.0 / 6.0 - theta2 / 120.0;
+  }
+
+  const double alpha = lambda2 / (lambda2 + theta2);
+  const double s_inv = exp(-lambda);
+  const double X = alpha * (1 - s_inv) / lambda + (1 - alpha) * (A - lambda * B);
+  const double Y = alpha * (s_inv - 1 + lambda) / lambda2 + (1 - alpha) * (B - lambda * C);
+
+  Matrix2 V;
+  V << X, -theta * Y, theta* Y, X;
+  return V;
+}
+
 Vector4 Similarity2::Logmap(const Similarity2& S,  //
                             OptionalJacobian<4, 4> Hm) {
-  const Vector2 u = S.t_;
   const Vector1 w = Rot2::Logmap(S.R_);
-  const double s = log(S.s_);
+  const double lambda = log(S.s_);
+  // In Expmap, t = V * u -> in Logmap, u = V^{-1} * t
   Vector4 result;
-  result << u, w, s;
+  result << GetV(w[0], lambda).inverse() * S.t_, w, lambda;
   if (Hm) {
     throw std::runtime_error("Similarity2::Logmap: derivative not implemented");
   }
@@ -213,17 +258,55 @@ Vector4 Similarity2::Logmap(const Similarity2& S,  //
 
 Similarity2 Similarity2::Expmap(const Vector4& v,  //
                                 OptionalJacobian<4, 4> Hm) {
-  const Vector2 t = v.head<2>();
-  const Rot2 R = Rot2::Expmap(v.segment<1>(2));
-  const double s = v[3];
+  const Vector2 u = v.head<2>();
+  const double theta = v[2];
+  const double lambda = v[3];
   if (Hm) {
     throw std::runtime_error("Similarity2::Expmap: derivative not implemented");
   }
-  return Similarity2(R, t, s);
+  const Matrix2 V = GetV(theta, lambda);
+  return Similarity2(Rot2::Expmap(v.segment<1>(2)), V * u, exp(lambda));
 }
 
 Matrix4 Similarity2::AdjointMap() const {
-  throw std::runtime_error("Similarity2::AdjointMap not implemented");
+  const Matrix2& R = R_.matrix();
+  const Point2& t = t_;
+  const double& s = s_;
+
+  Matrix4 Adj = Matrix4::Identity(); // Start with Identity
+
+  // Top-left 2x2 block: s * R
+  Adj.block<2, 2>(0, 0) = s * R;
+
+  // Top-right coupling terms, derived from T*Hat(xi)*T_inv
+  // Column w.r.t 'w': maps to [-s*J*t]
+  Adj(0, 2) = s * t.y();
+  Adj(1, 2) = -s * t.x();
+
+  // Column w.r.t 'lambda': maps to [-s*t]
+  Adj(0, 3) = -s * t.x();
+  Adj(1, 3) = -s * t.y();
+
+  return Adj;
+}
+
+Matrix3 Similarity2::Hat(const Vector4 &xi) {
+  const auto w = xi[2];
+  const auto u = xi.head<2>();
+  const double lambda = xi[3];
+  Matrix3 W;
+  W << 0, -w, u[0],
+       w,  0, u[1],
+       0,  0, -lambda;
+  return W;
+}
+
+Vector4 Similarity2::Vee(const Matrix3 &Xi) {
+  Vector4 xi;
+  xi[2] = Xi(1, 0);
+  xi.head<2>() = Xi.topRightCorner<2, 1>();
+  xi[3] = -Xi(2, 2);
+  return xi;
 }
 
 std::ostream& operator<<(std::ostream& os, const Similarity2& p) {

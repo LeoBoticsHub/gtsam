@@ -23,10 +23,6 @@
 #include <gtsam/base/types.h>
 #include <gtsam/base/Value.h>
 
-#include <boost/make_shared.hpp>
-#include <boost/pool/pool_alloc.hpp>
-
-#include <cmath>
 #include <iostream>
 #include <typeinfo> // operator typeid
 
@@ -59,9 +55,10 @@ public:
   GenericValue(){}
 
   /// Construct from value
-  GenericValue(const T& value) :
-      value_(value) {
-  }
+  GenericValue(const T& value) : Value(),
+      value_(value) {}
+
+  GenericValue(const GenericValue& other) = default;
 
   /// Return a constant value
   const T& value() const {
@@ -114,8 +111,8 @@ public:
     /**
      * Clone this value (normal clone on the heap, delete with 'delete' operator)
      */
-    boost::shared_ptr<Value> clone() const override {
-		return boost::allocate_shared<GenericValue>(Eigen::aligned_allocator<GenericValue>(), *this);
+    std::shared_ptr<Value> clone() const override {
+      return std::allocate_shared<GenericValue>(Eigen::aligned_allocator<GenericValue>(), *this);
     }
 
     /// Generic Value interface version of retract
@@ -176,6 +173,7 @@ public:
 
   private:
 
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
     /** Serialization function */
     friend class boost::serialization::access;
     template<class ARCHIVE>
@@ -184,12 +182,7 @@ public:
               boost::serialization::base_object<Value>(*this));
       ar & boost::serialization::make_nvp("value", value_);
 	}
-
-
-  // Alignment, see https://eigen.tuxfamily.org/dox/group__TopicStructHavingEigenMembers.html
-  enum { NeedsToAlign = (sizeof(T) % 16) == 0 };
-public:
-  GTSAM_MAKE_ALIGNED_OPERATOR_NEW_IF(NeedsToAlign)
+#endif
 };
 
 /// use this macro instead of BOOST_CLASS_EXPORT for GenericValues

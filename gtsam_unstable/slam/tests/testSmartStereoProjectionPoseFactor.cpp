@@ -77,7 +77,13 @@ vector<StereoPoint2> stereo_projectToMultipleCameras(const StereoCamera& cam1,
   return measurements_cam;
 }
 
-LevenbergMarquardtParams lm_params;
+LevenbergMarquardtParams makeLmParams() {
+  LevenbergMarquardtParams params;
+  params.linearSolverType = LevenbergMarquardtParams::MULTIFRONTAL_CHOLESKY;
+  return params;
+}
+
+LevenbergMarquardtParams lmParams = makeLmParams();
 }  // namespace
 
 /* ************************************************************************* */
@@ -269,7 +275,7 @@ TEST( SmartStereoProjectionPoseFactor, noisy ) {
   measurements.push_back(level_uv);
   measurements.push_back(level_uv_right);
 
-  vector<boost::shared_ptr<Cal3_S2Stereo> > Ks; ///< shared pointer to calibration object (one for each camera)
+  vector<std::shared_ptr<Cal3_S2Stereo> > Ks; ///< shared pointer to calibration object (one for each camera)
   Ks.push_back(K);
   Ks.push_back(K);
 
@@ -362,7 +368,7 @@ TEST( SmartStereoProjectionPoseFactor, 3poses_smart_projection_factor ) {
 
   Values result;
   gttic_(SmartStereoProjectionPoseFactor);
-  LevenbergMarquardtOptimizer optimizer(graph, values, lm_params);
+  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
   result = optimizer.optimize();
   gttoc_(SmartStereoProjectionPoseFactor);
   tictoc_finishedIteration_();
@@ -417,7 +423,7 @@ TEST( SmartStereoProjectionPoseFactor, 3poses_smart_projection_factor ) {
 //  cout << std::setprecision(10) << "\n----StereoFactor graph initial error: " << graph2.error(values) << endl;
   EXPECT_DOUBLES_EQUAL(833953.92789459578, graph2.error(values), 1e-7);
 
-  LevenbergMarquardtOptimizer optimizer2(graph2, values, lm_params);
+  LevenbergMarquardtOptimizer optimizer2(graph2, values, lmParams);
   Values result2 = optimizer2.optimize();
   EXPECT_DOUBLES_EQUAL(0, graph2.error(result2), 1e-5);
 
@@ -499,7 +505,7 @@ TEST( SmartStereoProjectionPoseFactor, body_P_sensor ) {
 
   Values result;
   gttic_(SmartStereoProjectionPoseFactor);
-  LevenbergMarquardtOptimizer optimizer(graph, values, lm_params);
+  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
   result = optimizer.optimize();
   gttoc_(SmartStereoProjectionPoseFactor);
   tictoc_finishedIteration_();
@@ -604,7 +610,7 @@ TEST( SmartStereoProjectionPoseFactor, body_P_sensor_monocular ){
   // initialize third pose with some noise, we expect it to move back to original pose3
   values.insert(x3, bodyPose3*noise_pose);
 
-  LevenbergMarquardtParams lmParams;
+  LevenbergMarquardtParams lmParams = makeLmParams();
   Values result;
   LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
   result = optimizer.optimize();
@@ -671,7 +677,7 @@ TEST( SmartStereoProjectionPoseFactor, jacobianSVD ) {
   values.insert(x3, pose3 * noise_pose);
 
   Values result;
-  LevenbergMarquardtOptimizer optimizer(graph, values, lm_params);
+  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
   result = optimizer.optimize();
   EXPECT(assert_equal(pose3, result.at<Pose3>(x3)));
 }
@@ -743,7 +749,7 @@ TEST( SmartStereoProjectionPoseFactor, jacobianSVDwithMissingValues ) {
   values.insert(x3, pose3 * noise_pose);
 
   Values result;
-  LevenbergMarquardtOptimizer optimizer(graph, values, lm_params);
+  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
   result = optimizer.optimize();
   EXPECT(assert_equal(pose3, result.at<Pose3>(x3),1e-7));
 }
@@ -813,7 +819,7 @@ TEST( SmartStereoProjectionPoseFactor, landmarkDistance ) {
 
   // All factors are disabled and pose should remain where it is
   Values result;
-  LevenbergMarquardtOptimizer optimizer(graph, values, lm_params);
+  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
   result = optimizer.optimize();
   EXPECT(assert_equal(values.at<Pose3>(x3), result.at<Pose3>(x3)));
 }
@@ -910,7 +916,7 @@ TEST( SmartStereoProjectionPoseFactor, dynamicOutlierRejection ) {
 
   // Factor 4 is disabled, pose 3 stays put
   Values result;
-  LevenbergMarquardtOptimizer optimizer(graph, values, lm_params);
+  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
   result = optimizer.optimize();
   EXPECT(assert_equal(pose3, result.at<Pose3>(x3)));
 }
@@ -971,7 +977,7 @@ TEST( SmartStereoProjectionPoseFactor, dynamicOutlierRejection ) {
 //  values.insert(x3, pose3*noise_pose);
 //
 ////  Values result;
-//  LevenbergMarquardtOptimizer optimizer(graph, values, lm_params);
+//  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
 //  result = optimizer.optimize();
 //  EXPECT(assert_equal(pose3,result.at<Pose3>(x3)));
 //}
@@ -1030,7 +1036,7 @@ TEST( SmartStereoProjectionPoseFactor, dynamicOutlierRejection ) {
 //  values.insert(L(2), landmark2);
 //  values.insert(L(3), landmark3);
 //
-//  LevenbergMarquardtOptimizer optimizer(graph, values, lm_params);
+//  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
 //  Values result = optimizer.optimize();
 //
 //  EXPECT(assert_equal(pose3,result.at<Pose3>(x3)));
@@ -1096,17 +1102,17 @@ TEST( SmartStereoProjectionPoseFactor, CheckHessian) {
   values.insert(x3, pose3 * noise_pose);
 
   // TODO: next line throws Cheirality exception on Mac
-  boost::shared_ptr<GaussianFactor> hessianFactor1 = smartFactor1->linearize(
+  std::shared_ptr<GaussianFactor> hessianFactor1 = smartFactor1->linearize(
       values);
-  boost::shared_ptr<GaussianFactor> hessianFactor2 = smartFactor2->linearize(
+  std::shared_ptr<GaussianFactor> hessianFactor2 = smartFactor2->linearize(
       values);
-  boost::shared_ptr<GaussianFactor> hessianFactor3 = smartFactor3->linearize(
+  std::shared_ptr<GaussianFactor> hessianFactor3 = smartFactor3->linearize(
       values);
 
   Matrix CumulativeInformation = hessianFactor1->information()
       + hessianFactor2->information() + hessianFactor3->information();
 
-  boost::shared_ptr<GaussianFactorGraph> GaussianGraph = graph.linearize(
+  std::shared_ptr<GaussianFactorGraph> GaussianGraph = graph.linearize(
       values);
   Matrix GraphInformation = GaussianGraph->hessian().first;
 
@@ -1181,7 +1187,7 @@ TEST( SmartStereoProjectionPoseFactor, CheckHessian) {
 //
 //  Values result;
 //  gttic_(SmartStereoProjectionPoseFactor);
-//  LevenbergMarquardtOptimizer optimizer(graph, values, lm_params);
+//  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
 //  result = optimizer.optimize();
 //  gttoc_(SmartStereoProjectionPoseFactor);
 //  tictoc_finishedIteration_();
@@ -1255,7 +1261,7 @@ TEST( SmartStereoProjectionPoseFactor, CheckHessian) {
 //
 //  Values result;
 //  gttic_(SmartStereoProjectionPoseFactor);
-//  LevenbergMarquardtOptimizer optimizer(graph, values, lm_params);
+//  LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
 //  result = optimizer.optimize();
 //  gttoc_(SmartStereoProjectionPoseFactor);
 //  tictoc_finishedIteration_();
@@ -1297,7 +1303,7 @@ TEST( SmartStereoProjectionPoseFactor, CheckHessian) {
 //  values.insert(x1, pose1);
 //  values.insert(x2, pose2);
 //
-//  boost::shared_ptr<GaussianFactor> hessianFactor = smartFactor1->linearize(values);
+//  std::shared_ptr<GaussianFactor> hessianFactor = smartFactor1->linearize(values);
 //
 //  // compute triangulation from linearization point
 //  // compute reprojection errors (sum squared)
@@ -1338,7 +1344,7 @@ TEST( SmartStereoProjectionPoseFactor, HessianWithRotation ) {
   values.insert(x2, pose2);
   values.insert(x3, pose3);
 
-  boost::shared_ptr<GaussianFactor> hessianFactor =
+  std::shared_ptr<GaussianFactor> hessianFactor =
       smartFactorInstance->linearize(values);
   // hessianFactor->print("Hessian factor \n");
 
@@ -1349,7 +1355,7 @@ TEST( SmartStereoProjectionPoseFactor, HessianWithRotation ) {
   rotValues.insert(x2, poseDrift.compose(pose2));
   rotValues.insert(x3, poseDrift.compose(pose3));
 
-  boost::shared_ptr<GaussianFactor> hessianFactorRot =
+  std::shared_ptr<GaussianFactor> hessianFactorRot =
       smartFactorInstance->linearize(rotValues);
   // hessianFactorRot->print("Hessian factor \n");
 
@@ -1366,7 +1372,7 @@ TEST( SmartStereoProjectionPoseFactor, HessianWithRotation ) {
   tranValues.insert(x2, poseDrift2.compose(pose2));
   tranValues.insert(x3, poseDrift2.compose(pose3));
 
-  boost::shared_ptr<GaussianFactor> hessianFactorRotTran =
+  std::shared_ptr<GaussianFactor> hessianFactorRotTran =
       smartFactorInstance->linearize(tranValues);
 
   // Hessian is invariant to rotations and translations in the nondegenerate case
@@ -1406,7 +1412,7 @@ TEST( SmartStereoProjectionPoseFactor, HessianWithRotationNonDegenerate ) {
   values.insert(x2, pose2);
   values.insert(x3, pose3);
 
-  boost::shared_ptr<GaussianFactor> hessianFactor = smartFactor->linearize(
+  std::shared_ptr<GaussianFactor> hessianFactor = smartFactor->linearize(
       values);
 
   // check that it is non degenerate
@@ -1419,7 +1425,7 @@ TEST( SmartStereoProjectionPoseFactor, HessianWithRotationNonDegenerate ) {
   rotValues.insert(x2, poseDrift.compose(pose2));
   rotValues.insert(x3, poseDrift.compose(pose3));
 
-  boost::shared_ptr<GaussianFactor> hessianFactorRot = smartFactor->linearize(
+  std::shared_ptr<GaussianFactor> hessianFactorRot = smartFactor->linearize(
       rotValues);
 
   // check that it is non degenerate
@@ -1438,17 +1444,17 @@ TEST( SmartStereoProjectionPoseFactor, HessianWithRotationNonDegenerate ) {
   tranValues.insert(x2, poseDrift2.compose(pose2));
   tranValues.insert(x3, poseDrift2.compose(pose3));
 
-  boost::shared_ptr<GaussianFactor> hessianFactorRotTran =
+  std::shared_ptr<GaussianFactor> hessianFactorRotTran =
       smartFactor->linearize(tranValues);
 
-  // Hessian is invariant to rotations and translations in the degenerate case
-  EXPECT(
-      assert_equal(hessianFactor->information(),
+  double error;
 #ifdef GTSAM_USE_EIGEN_MKL
-          hessianFactorRotTran->information(), 1e-5));
+  error = 1e-5;
 #else
-          hessianFactorRotTran->information(), 1e-6));
+  error = 1e-6;
 #endif
+  // Hessian is invariant to rotations and translations in the degenerate case
+  EXPECT(assert_equal(hessianFactor->information(), hessianFactorRotTran->information(), error));
 }
 
 /* ************************************************************************* */
@@ -1457,4 +1463,3 @@ int main() {
   return TestRegistry::runAllTests(tr);
 }
 /* ************************************************************************* */
-

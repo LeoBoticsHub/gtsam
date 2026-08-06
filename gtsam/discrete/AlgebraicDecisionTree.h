@@ -20,11 +20,14 @@
 
 #include <gtsam/base/Testable.h>
 #include <gtsam/discrete/DecisionTree-inl.h>
+#include <gtsam/discrete/Ring.h>
 
-#include <algorithm>
+#include <iomanip>
+#include <limits>
 #include <map>
 #include <string>
 #include <vector>
+
 namespace gtsam {
 
   /**
@@ -35,7 +38,7 @@ namespace gtsam {
    * @ingroup discrete
    */
   template <typename L>
-  class GTSAM_EXPORT AlgebraicDecisionTree : public DecisionTree<L, double> {
+  class AlgebraicDecisionTree : public DecisionTree<L, double> {
     /**
      * @brief Default method used by `labelFormatter` or `valueFormatter` when
      * printing.
@@ -52,26 +55,10 @@ namespace gtsam {
    public:
     using Base = DecisionTree<L, double>;
 
-    /** The Real ring with addition and multiplication */
-    struct Ring {
-      static inline double zero() { return 0.0; }
-      static inline double one() { return 1.0; }
-      static inline double add(const double& a, const double& b) {
-        return a + b;
-      }
-      static inline double max(const double& a, const double& b) {
-        return std::max(a, b);
-      }
-      static inline double mul(const double& a, const double& b) {
-        return a * b;
-      }
-      static inline double div(const double& a, const double& b) {
-        return a / b;
-      }
-      static inline double id(const double& x) { return x; }
-    };
-
     AlgebraicDecisionTree(double leaf = 1.0) : Base(leaf) {}
+
+    /// Constructor which accepts root pointer
+    AlgebraicDecisionTree(const typename Base::NodePtr root) : Base(root) {}
 
     // Explicitly non-explicit constructor
     AlgebraicDecisionTree(const Base& add) : Base(add) {}
@@ -180,9 +167,34 @@ namespace gtsam {
       this->root_ = DecisionTree<L, double>::convertFrom(other.root_, L_of_M, op);
     }
 
+    /**
+     * @brief Create from an arbitrary DecisionTree<L, X> by operating on it
+     * with a functional `f`.
+     *
+     * @tparam X The type of the leaf of the original DecisionTree
+     * @tparam Func Type signature of functional `f`.
+     * @param other The original DecisionTree from which the
+     * AlgbraicDecisionTree is constructed.
+     * @param f Functional used to operate on
+     * the leaves of the input DecisionTree.
+     */
+    template <typename X, typename Func>
+    AlgebraicDecisionTree(const DecisionTree<L, X>& other, Func f)
+        : Base(other, f) {}
+
     /** sum */
     AlgebraicDecisionTree operator+(const AlgebraicDecisionTree& g) const {
       return this->apply(g, &Ring::add);
+    }
+
+    /** negation */
+    AlgebraicDecisionTree operator-() const {
+      return this->apply(&Ring::negate);
+    }
+
+    /** subtract */
+    AlgebraicDecisionTree operator-(const AlgebraicDecisionTree& g) const {
+      return *this + (-g);
     }
 
     /** product */
@@ -193,6 +205,39 @@ namespace gtsam {
     /** division */
     AlgebraicDecisionTree operator/(const AlgebraicDecisionTree& g) const {
       return this->apply(g, &Ring::div);
+    }
+
+    /// Compute sum of all values
+    double sum() const {
+      double sum = 0;
+      auto visitor = [&](double y) { sum += y; };
+      this->visit(visitor);
+      return sum;
+    }
+
+    /**
+     * @brief Helper method to perform normalization such that all leaves in the
+     * tree sum to 1
+     *
+     * @return AlgebraicDecisionTree
+     */
+    AlgebraicDecisionTree normalize() const { return (*this) / this->sum(); }
+
+    /// Find the minimum values amongst all leaves
+    double min() const {
+      double min = std::numeric_limits<double>::max();
+      auto visitor = [&](double x) { min = x < min ? x : min; };
+      this->visit(visitor);
+      return min;
+    }
+
+    /// Find the maximum values amongst all leaves
+    double max() const {
+      // Get the most negative value
+      double max = -std::numeric_limits<double>::max();
+      auto visitor = [&](double x) { max = x > max ? x : max; };
+      this->visit(visitor);
+      return max;
     }
 
     /** sum out variable */
@@ -210,7 +255,9 @@ namespace gtsam {
                const typename Base::LabelFormatter& labelFormatter =
                    &DefaultFormatter) const {
       auto valueFormatter = [](const double& v) {
-        return (boost::format("%4.8g") % v).str();
+        std::stringstream ss;
+        ss << std::setw(4) << std::setprecision(8) << v;
+        return ss.str();
       };
       Base::print(s, labelFormatter, valueFormatter);
     }

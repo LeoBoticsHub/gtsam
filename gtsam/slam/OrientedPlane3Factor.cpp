@@ -7,6 +7,8 @@
 
 #include "OrientedPlane3Factor.h"
 
+#include <gtsam/base/VectorConstants.h>
+
 using namespace std;
 
 namespace gtsam {
@@ -23,8 +25,8 @@ void OrientedPlane3Factor::print(const string& s,
 
 //***************************************************************************
 Vector OrientedPlane3Factor::evaluateError(const Pose3& pose,
-    const OrientedPlane3& plane, boost::optional<Matrix&> H1,
-    boost::optional<Matrix&> H2) const {
+    const OrientedPlane3& plane, OptionalMatrixType H1,
+    OptionalMatrixType H2) const {
   Matrix36 predicted_H_pose;
   Matrix33 predicted_H_plane, error_H_predicted;
 
@@ -64,11 +66,11 @@ bool OrientedPlane3DirectionPrior::equals(const NonlinearFactor& expected,
 
 //***************************************************************************
 Vector OrientedPlane3DirectionPrior::evaluateError(
-    const OrientedPlane3& plane, boost::optional<Matrix&> H) const {
+    const OrientedPlane3& plane, OptionalMatrixType H) const {
   Unit3 n_hat_p = measured_p_.normal();
   Unit3 n_hat_q = plane.normal();
   Matrix2 H_p;
-  Vector e = n_hat_p.error(n_hat_q, H ? &H_p : nullptr);
+  Vector e = n_hat_p.errorVector(n_hat_q, {}, H ? &H_p : nullptr);
   if (H) {
     H->resize(2, 3);
     *H << H_p, Z_2x1;

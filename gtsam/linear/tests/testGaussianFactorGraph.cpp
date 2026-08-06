@@ -18,16 +18,20 @@
  *  @author Richard Roberts
  **/
 
-#include <gtsam/linear/GaussianFactorGraph.h>
-#include <gtsam/linear/GaussianConditional.h>
-#include <gtsam/linear/GaussianBayesNet.h>
-#include <gtsam/inference/VariableSlots.h>
-#include <gtsam/inference/VariableIndex.h>
-#include <gtsam/base/debug.h>
-#include <gtsam/base/VerticalBlockMatrix.h>
-
-#include <gtsam/base/TestableAssertions.h>
 #include <CppUnitLite/TestHarness.h>
+#include <gtsam/base/MatrixConstants.h>
+#include <gtsam/base/TestableAssertions.h>
+#include <gtsam/base/VerticalBlockMatrix.h>
+#include <gtsam/base/debug.h>
+#include <gtsam/inference/Ordering.h>
+#include <gtsam/inference/Symbol.h>
+#include <gtsam/inference/VariableIndex.h>
+#include <gtsam/inference/VariableSlots.h>
+#include <gtsam/linear/GaussianBayesNet.h>
+#include <gtsam/linear/GaussianBayesTree.h>
+#include <gtsam/linear/GaussianConditional.h>
+#include <gtsam/linear/GaussianFactorGraph.h>
+#include <gtsam/symbolic/IndexedJunctionTree.h>
 
 using namespace std;
 using namespace gtsam;
@@ -51,11 +55,10 @@ TEST(GaussianFactorGraph, initialization) {
   GaussianFactorGraph fg;
   SharedDiagonal unit2 = noiseModel::Unit::Create(2);
 
-  fg +=
-    JacobianFactor(0, 10*I_2x2, -1.0*Vector::Ones(2), unit2),
-    JacobianFactor(0, -10*I_2x2,1, 10*I_2x2, Vector2(2.0, -1.0), unit2),
-    JacobianFactor(0, -5*I_2x2, 2, 5*I_2x2, Vector2(0.0, 1.0), unit2),
-    JacobianFactor(1, -5*I_2x2, 2, 5*I_2x2, Vector2(-1.0, 1.5), unit2);
+  fg.emplace_shared<JacobianFactor>(0, 10*I_2x2, -1.0*Vector::Ones(2), unit2);
+  fg.emplace_shared<JacobianFactor>(0, -10*I_2x2,1, 10*I_2x2, Vector2(2.0, -1.0), unit2);
+  fg.emplace_shared<JacobianFactor>(0, -5*I_2x2, 2, 5*I_2x2, Vector2(0.0, 1.0), unit2);
+  fg.emplace_shared<JacobianFactor>(1, -5*I_2x2, 2, 5*I_2x2, Vector2(-1.0, 1.5), unit2);
 
   EXPECT_LONGS_EQUAL(4, (long)fg.size());
 
@@ -69,6 +72,28 @@ TEST(GaussianFactorGraph, initialization) {
         1., -5., -5., 5., 5., -1., 1.5).finished();
   Matrix actualIJS = fg.sparseJacobian_();
   EQUALITY(expectedIJS, actualIJS);
+}
+
+/* ************************************************************************* */
+TEST(GaussianFactorGraph, Append) {
+  // Create empty graph
+  GaussianFactorGraph fg;
+  SharedDiagonal unit2 = noiseModel::Unit::Create(2);
+
+  auto f1 =
+      make_shared<JacobianFactor>(0, 10 * I_2x2, -1.0 * Vector::Ones(2), unit2);
+  auto f2 = make_shared<JacobianFactor>(0, -10 * I_2x2, 1, 10 * I_2x2,
+                                        Vector2(2.0, -1.0), unit2);
+  auto f3 = make_shared<JacobianFactor>(0, -5 * I_2x2, 2, 5 * I_2x2,
+                                        Vector2(0.0, 1.0), unit2);
+
+  fg += f1;
+  fg += f2;
+  EXPECT_LONGS_EQUAL(2, fg.size());
+
+  fg = GaussianFactorGraph();
+  fg += f1, f2, f3;
+  EXPECT_LONGS_EQUAL(3, fg.size());
 }
 
 /* ************************************************************************* */
@@ -155,20 +180,16 @@ TEST(GaussianFactorGraph, matrices) {
   // jacobian
   Matrix A = Ab.leftCols(Ab.cols() - 1);
   Vector b = Ab.col(Ab.cols() - 1);
-  Matrix actualA;
-  Vector actualb;
-  boost::tie(actualA, actualb) = gfg.jacobian();
+  const auto [actualA, actualb] = gfg.jacobian();
   EXPECT(assert_equal(A, actualA));
   EXPECT(assert_equal(b, actualb));
 
   // hessian
   Matrix L = A.transpose() * A;
   Vector eta = A.transpose() * b;
-  Matrix actualL;
-  Vector actualeta;
-  boost::tie(actualL, actualeta) = gfg.hessian();
+  const auto [actualL, actualEta] = gfg.hessian();
   EXPECT(assert_equal(L, actualL));
-  EXPECT(assert_equal(eta, actualeta));
+  EXPECT(assert_equal(eta, actualEta));
 
   // hessianBlockDiagonal
   VectorValues expectLdiagonal;  // Make explicit that diagonal is sum-squares of columns
@@ -190,13 +211,13 @@ static GaussianFactorGraph createSimpleGaussianFactorGraph() {
   Key x1 = 2, x2 = 0, l1 = 1;
   SharedDiagonal unit2 = noiseModel::Unit::Create(2);
   // linearized prior on x1: c[_x1_]+x1=0 i.e. x1=-c[_x1_]
-  fg += JacobianFactor(x1, 10 * I_2x2, -1.0 * Vector::Ones(2), unit2);
+  fg.emplace_shared<JacobianFactor>(x1, 10 * I_2x2, -1.0 * Vector::Ones(2), unit2);
   // odometry between x1 and x2: x2-x1=[0.2;-0.1]
-  fg += JacobianFactor(x2, 10 * I_2x2, x1, -10 * I_2x2, Vector2(2.0, -1.0), unit2);
+  fg.emplace_shared<JacobianFactor>(x2, 10 * I_2x2, x1, -10 * I_2x2, Vector2(2.0, -1.0), unit2);
   // measurement between x1 and l1: l1-x1=[0.0;0.2]
-  fg += JacobianFactor(l1, 5 * I_2x2, x1, -5 * I_2x2, Vector2(0.0, 1.0), unit2);
+  fg.emplace_shared<JacobianFactor>(l1, 5 * I_2x2, x1, -5 * I_2x2, Vector2(0.0, 1.0), unit2);
   // measurement between x2 and l1: l1-x2=[-0.2;0.3]
-  fg += JacobianFactor(x2, -5 * I_2x2, l1, 5 * I_2x2, Vector2(-1.0, 1.5), unit2);
+  fg.emplace_shared<JacobianFactor>(x2, -5 * I_2x2, l1, 5 * I_2x2, Vector2(-1.0, 1.5), unit2);
   return fg;
 }
 
@@ -245,9 +266,7 @@ TEST(GaussianFactorGraph, eliminate_empty) {
   // eliminate an empty factor
   GaussianFactorGraph gfg;
   gfg.add(JacobianFactor());
-  GaussianBayesNet::shared_ptr actualBN;
-  GaussianFactorGraph::shared_ptr remainingGFG;
-  boost::tie(actualBN, remainingGFG) = gfg.eliminatePartialSequential(Ordering());
+  const auto [actualBN, remainingGFG] = gfg.eliminatePartialSequential(Ordering());
 
   // expected Bayes net is empty
   GaussianBayesNet expectedBN;
@@ -263,12 +282,8 @@ TEST(GaussianFactorGraph, eliminate_empty) {
 /* ************************************************************************* */
 TEST(GaussianFactorGraph, matrices2) {
   GaussianFactorGraph gfg = createSimpleGaussianFactorGraph();
-  Matrix A;
-  Vector b;
-  boost::tie(A, b) = gfg.jacobian();
-  Matrix AtA;
-  Vector eta;
-  boost::tie(AtA, eta) = gfg.hessian();
+  const auto [A, b] = gfg.jacobian();
+  const auto [AtA, eta] = gfg.hessian();
   EXPECT(assert_equal(A.transpose() * A, AtA));
   EXPECT(assert_equal(A.transpose() * b, eta));
   Matrix expectedAtA(6, 6);
@@ -310,13 +325,33 @@ static GaussianFactorGraph createGaussianFactorGraphWithHessianFactor() {
 }
 
 /* ************************************************************************* */
+TEST(GaussianFactorGraph, deltaError) {
+  GaussianFactorGraph gfg = createGaussianFactorGraphWithHessianFactor();
+
+  VectorValues values{{0, Vector2(0.1, -0.2)},
+                      {1, Vector2(1.0, 0.5)},
+                      {2, Vector2(-0.3, 0.8)}};
+  VectorValues zero = VectorValues::Zero(values);
+
+  double expectedOld = gfg.error(zero);
+  double expectedNew = gfg.error(values);
+  double expectedDelta = expectedOld - expectedNew;
+
+  double oldValue = 0.0;
+  double newValue = 0.0;
+  double delta = gfg.deltaError(values, &oldValue, &newValue);
+
+  DOUBLES_EQUAL(expectedOld, oldValue, 1e-10);
+  DOUBLES_EQUAL(expectedNew, newValue, 1e-10);
+  DOUBLES_EQUAL(expectedDelta, delta, 1e-10);
+}
+
+/* ************************************************************************* */
 TEST(GaussianFactorGraph, multiplyHessianAdd2) {
   GaussianFactorGraph gfg = createGaussianFactorGraphWithHessianFactor();
 
   // brute force
-  Matrix AtA;
-  Vector eta;
-  boost::tie(AtA, eta) = gfg.hessian();
+  const auto [AtA, eta] = gfg.hessian();
   Vector X(6);
   X << 1, 2, 3, 4, 5, 6;
   Vector Y(6);
@@ -341,12 +376,8 @@ TEST(GaussianFactorGraph, multiplyHessianAdd2) {
 /* ************************************************************************* */
 TEST(GaussianFactorGraph, matricesMixed) {
   GaussianFactorGraph gfg = createGaussianFactorGraphWithHessianFactor();
-  Matrix A;
-  Vector b;
-  boost::tie(A, b) = gfg.jacobian();  // incorrect !
-  Matrix AtA;
-  Vector eta;
-  boost::tie(AtA, eta) = gfg.hessian();  // correct
+  const auto [A, b] = gfg.jacobian();  // incorrect !
+  const auto [AtA, eta] = gfg.hessian();  // correct
   EXPECT(assert_equal(A.transpose() * A, AtA));
   Vector expected = -(Vector(6) << -25, 17.5, 5, -13.5, 29, 4).finished();
   EXPECT(assert_equal(expected, eta));
@@ -385,8 +416,7 @@ TEST(GaussianFactorGraph, clone) {
   EXPECT(assert_equal(init_graph, actCloned));  // Same as the original version
 
   // Apply an in-place change to init_graph and compare
-  JacobianFactor::shared_ptr jacFactor0 =
-      boost::dynamic_pointer_cast<JacobianFactor>(init_graph.at(0));
+  JacobianFactor::shared_ptr jacFactor0 = init_graph.at<JacobianFactor>(0);
   CHECK(jacFactor0);
   jacFactor0->getA(jacFactor0->begin()) *= 7.;
   EXPECT(assert_inequal(init_graph, exp_graph));
@@ -431,6 +461,20 @@ TEST(GaussianFactorGraph, DenseSolve) {
 }
 
 /* ************************************************************************* */
+TEST(GaussianFactorGraph, optimizeWithIndexedJunctionTree) {
+  GaussianFactorGraph fg = createSimpleGaussianFactorGraph();
+  Ordering ordering{0, 1, 2};  // x2=0, l1=1, x1=2
+
+  IndexedJunctionTree indexedJunctionTree = fg.buildIndexedJunctionTree(ordering);
+
+  VectorValues expected = fg.optimize(ordering, EliminateQR);
+  VectorValues actual =
+      fg.eliminateMultifrontal(indexedJunctionTree, EliminateQR)->optimize();
+
+  EXPECT(assert_equal(expected, actual, 1e-9));
+}
+
+/* ************************************************************************* */
 TEST(GaussianFactorGraph, ProbPrime) {
   GaussianFactorGraph gfg;
   gfg.emplace_shared<JacobianFactor>(1, I_1x1, Z_1x1,
@@ -452,6 +496,64 @@ TEST(GaussianFactorGraph, ProbPrime) {
   EXPECT_DOUBLES_EQUAL(expected, gfg.probPrime(values), 1e-12);
 }
 
+TEST(GaussianFactorGraph, InconsistentEliminationMessage) {
+  // Create empty graph
+  GaussianFactorGraph fg;
+  SharedDiagonal unit2 = noiseModel::Unit::Create(2);
+
+  using gtsam::symbol_shorthand::X;
+  fg.emplace_shared<JacobianFactor>(0, 10 * I_2x2, -1.0 * Vector::Ones(2),
+                                    unit2);
+  fg.emplace_shared<JacobianFactor>(0, -10 * I_2x2, 1, 10 * I_2x2,
+                                    Vector2(2.0, -1.0), unit2);
+  fg.emplace_shared<JacobianFactor>(1, -5 * I_2x2, 2, 5 * I_2x2,
+                                    Vector2(-1.0, 1.5), unit2);
+  fg.emplace_shared<JacobianFactor>(2, -5 * I_2x2, X(3), 5 * I_2x2,
+                                    Vector2(-1.0, 1.5), unit2);
+
+  Ordering ordering{0, 1};
+
+  try {
+    fg.eliminateSequential(ordering);
+  } catch (const exception& exc) {
+    std::string expected_exception_message = "An inference algorithm was called with inconsistent "
+        "arguments.  "
+        "The\n"
+        "factor graph, ordering, or variable index were "
+        "inconsistent with "
+        "each\n"
+        "other, or a full elimination routine was called with "
+        "an ordering "
+        "that\n"
+        "does not include all of the variables.\n"
+        "Leftover keys after elimination: 2, x3.";
+    EXPECT(expected_exception_message == exc.what());
+  }
+
+  // Test large number of keys
+  fg = GaussianFactorGraph();
+  for (size_t i = 0; i < 1000; i++) {
+    fg.emplace_shared<JacobianFactor>(i, -I_2x2, i + 1, I_2x2,
+                                      Vector2(2.0, -1.0), unit2);
+  }
+
+  try {
+    fg.eliminateSequential(ordering);
+  } catch (const exception& exc) {
+    std::string expected_exception_message = "An inference algorithm was called with inconsistent "
+        "arguments.  "
+        "The\n"
+        "factor graph, ordering, or variable index were "
+        "inconsistent with "
+        "each\n"
+        "other, or a full elimination routine was called with "
+        "an ordering "
+        "that\n"
+        "does not include all of the variables.\n"
+        "Leftover keys after elimination: 2, 3, 4, 5, ... (total 999 keys).";
+    EXPECT(expected_exception_message == exc.what());
+  }
+}
 /* ************************************************************************* */
 int main() {
   TestResult tr;

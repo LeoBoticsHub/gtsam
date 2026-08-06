@@ -18,13 +18,12 @@
 #pragma once
 
 #include <gtsam/linear/Scatter.h>
-#include <gtsam/inference/Ordering.h>
 #include <gtsam/base/Vector.h>
 #include <gtsam/base/ConcurrentMap.h>
 #include <gtsam/base/FastVector.h>
 #include <gtsam/global_includes.h>
 
-#include <boost/shared_ptr.hpp>
+#include <memory>
 
 
 #include <map>
@@ -80,7 +79,7 @@ namespace gtsam {
    public:
     typedef Values::iterator iterator;              ///< Iterator over vector values
     typedef Values::const_iterator const_iterator;  ///< Const iterator over vector values
-    typedef boost::shared_ptr<This> shared_ptr;     ///< shared_ptr to this class
+    typedef std::shared_ptr<This> shared_ptr;       ///< shared_ptr to this class
     typedef Values::value_type value_type;          ///< Typedef to pair<Key, Vector>
     typedef value_type KeyValuePair;                ///< Typedef to pair<Key, Vector>
     typedef std::map<Key, size_t> Dims;             ///< Keyed vector dimensions
@@ -103,7 +102,7 @@ namespace gtsam {
     template<class CONTAINER>
     explicit VectorValues(const CONTAINER& c) : values_(c.begin(), c.end()) {}
 
-    /** Implicit copy constructor to specialize the explicit constructor from any container. */
+    /** Copy constructor to specialize the explicit constructor from any container. */
     VectorValues(const VectorValues& c) : values_(c.values_) {}
 
     /** Create from a pair of iterators over pair<Key,Vector>. */
@@ -115,6 +114,9 @@ namespace gtsam {
 
     /// Constructor from Vector, with Scatter
     VectorValues(const Vector& c, const Scatter& scatter);
+
+    // We override the copy constructor; expicitly declare operator=
+    VectorValues& operator=(const VectorValues& other) = default;
 
     /** Create a VectorValues with the same structure as \c other, but filled with zeros. */
     static VectorValues Zero(const VectorValues& other);
@@ -186,7 +188,7 @@ namespace gtsam {
 #if ! defined(GTSAM_USE_TBB) || defined (TBB_GREATER_EQUAL_2020)
       return values_.emplace(std::piecewise_construct, std::forward_as_tuple(j), std::forward_as_tuple(args...));
 #else
-      return values_.insert(std::make_pair(j, Vector(std::forward<Args>(args)...)));
+      return values_.insert({j, Vector(std::forward<Args>(args)...)});
 #endif
     }
 
@@ -195,12 +197,23 @@ namespace gtsam {
      * @param value The vector to be inserted.
      * @param j The index with which the value will be associated. */
     iterator insert(Key j, const Vector& value) {
-      return insert(std::make_pair(j, value));
+      return insert({j, value});
     }
 
     /** Insert all values from \c values.  Throws an invalid_argument exception if any keys to be
      *  inserted are already used. */
     VectorValues& insert(const VectorValues& values);
+
+    /** Insert values from a concatenated vector using an explicit key order and dims.
+     * This method splits the concatenated vector according to the dimensions
+     * specified in dims and inserts each segment with the corresponding key from keys.
+     * @param values The concatenated vector to insert.
+     * @param keys The keys in order corresponding to segments in values.
+     * @param dims The dimensions map specifying the size of each key's vector.
+     * @return Reference to this VectorValues for chaining.
+     * @throws invalid_argument if any key already exists or if dimensions don't match. */
+    VectorValues& insert(const Vector& values, const KeyVector& keys,
+                         const Dims& dims);
 
     /** insert that mimics the STL map insert - if the value already exists, the map is not modified
      *  and an iterator to the existing value is returned, along with 'false'.  If the value did not
@@ -210,7 +223,7 @@ namespace gtsam {
 #ifdef TBB_GREATER_EQUAL_2020
       return values_.emplace(j, value);
 #else
-      return values_.insert(std::make_pair(j, value));
+      return values_.insert({j, value});
 #endif
     }
 
@@ -267,16 +280,39 @@ namespace gtsam {
     /** Retrieve the entire solution as a single vector */
     Vector vector() const;
 
+    /** Compute the total dimension of a subset of relevant keys. */
+    template <typename CONTAINER>
+    DenseIndex totalDim(const CONTAINER& keys) const {
+      DenseIndex totalDim = 0;
+      for (Key key : keys) {
+        totalDim += static_cast<DenseIndex>(at(key).size());
+      }
+      return totalDim;
+    }
+
+    /** Fill a preallocated Eigen vector expression with a subset of relevant keys. */
+    template <typename CONTAINER, typename Derived>
+    void fillVector(const CONTAINER& keys,
+                    const Eigen::MatrixBase<Derived>& result) const {
+      auto& writable = const_cast<Eigen::MatrixBase<Derived>&>(result);
+      DenseIndex pos = 0;
+      for (Key key : keys) {
+        const Vector& v = at(key);
+        writable.segment(pos, v.size()) = v;
+        pos += v.size();
+      }
+    }
+
     /** Access a vector that is a subset of relevant keys. */
     template <typename CONTAINER>
     Vector vector(const CONTAINER& keys) const {
       DenseIndex totalDim = 0;
       FastVector<const Vector*> items;
-      items.reserve(keys.end() - keys.begin());
+      items.reserve(keys.size());
       for (Key key : keys) {
         const Vector* v = &at(key);
         totalDim += v->size();
-        items.push_back(v);
+        items.emplace_back(v);
       }
 
       Vector result(totalDim);
@@ -352,6 +388,9 @@ namespace gtsam {
     /** Element-wise scaling by a constant in-place. */
     VectorValues& scaleInPlace(double alpha);
 
+    /** Sort by key (primarily for use with TBB, which uses an unordered map)*/
+    std::map<Key, const Vector&> sorted() const;
+
     /// @}
 
     /// @name Wrapper support
@@ -368,12 +407,14 @@ namespace gtsam {
     /// @}
 
   private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
     /** Serialization function */
     friend class boost::serialization::access;
     template<class ARCHIVE>
     void serialize(ARCHIVE & ar, const unsigned int /*version*/) {
       ar & BOOST_SERIALIZATION_NVP(values_);
     }
+#endif
   }; // VectorValues definition
 
   /// traits

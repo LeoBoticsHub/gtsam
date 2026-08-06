@@ -16,7 +16,6 @@
  */
 
 #include <gtsam/base/FastVector.h>
-#include <gtsam/inference/Ordering.h>
 #include <gtsam/symbolic/SymbolicFactor.h>
 #include <gtsam/symbolic/SymbolicConditional.h>
 #include <gtsam/symbolic/SymbolicFactorGraph.h>
@@ -32,7 +31,7 @@ namespace gtsam {
   }
 
   /* ************************************************************************* */
-  std::pair<boost::shared_ptr<SymbolicConditional>, boost::shared_ptr<SymbolicFactor> >
+  std::pair<std::shared_ptr<SymbolicConditional>, std::shared_ptr<SymbolicFactor> >
     EliminateSymbolic(const SymbolicFactorGraph& factors, const Ordering& keys)
   {
     return internal::EliminateSymbolic(factors, keys);
@@ -45,11 +44,11 @@ namespace gtsam {
   }
 
   /* ************************************************************************* */
-  std::pair<boost::shared_ptr<SymbolicConditional>, boost::shared_ptr<SymbolicFactor> >
+  std::pair<std::shared_ptr<SymbolicConditional>, std::shared_ptr<SymbolicFactor> >
     SymbolicFactor::eliminate(const Ordering& keys) const
   {
     SymbolicFactorGraph graph;
-    graph += *this; // TODO: Is there a way to avoid copying this factor?
+    graph.push_back(*this); // TODO: Is there a way to avoid copying this factor?
     return EliminateSymbolic(graph, keys);
   }
 

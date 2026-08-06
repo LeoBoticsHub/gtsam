@@ -4,16 +4,17 @@
  */
 
 #include <CppUnitLite/TestHarness.h>
+#include <gtsam/base/MatrixConstants.h>
 #include <gtsam/base/Testable.h>
 #include <gtsam/base/TestableAssertions.h>
+#include <gtsam/base/VectorConstants.h>
 #include <gtsam/base/numericalDerivative.h>
-
 #include <gtsam_unstable/dynamics/PoseRTV.h>
 
 using namespace gtsam;
 
 GTSAM_CONCEPT_TESTABLE_INST(PoseRTV)
-GTSAM_CONCEPT_LIE_INST(PoseRTV)
+GTSAM_CONCEPT_MATRIX_LIE_GROUP_INST(PoseRTV)
 
 static const Rot3 rot = Rot3::RzRyRx(0.1, 0.2, 0.3);
 static const Point3 pt(1.0, 2.0, 3.0);

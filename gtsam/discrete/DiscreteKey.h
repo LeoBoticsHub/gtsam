@@ -21,7 +21,9 @@
 #include <gtsam/global_includes.h>
 #include <gtsam/inference/Key.h>
 
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
 #include <boost/serialization/vector.hpp>
+#endif
 #include <map>
 #include <string>
 #include <vector>
@@ -40,9 +42,6 @@ namespace gtsam {
 
     // Forward all constructors.
     using std::vector<DiscreteKey>::vector;
-
-    /// Constructor for serialization
-    DiscreteKeys() : std::vector<DiscreteKey>::vector() {}
 
     /// Construct from a key
     explicit DiscreteKeys(const DiscreteKey& key) { push_back(key); }
@@ -72,6 +71,12 @@ namespace gtsam {
       return *this;
     }
 
+    /// Add multiple keys (non-const!)
+    DiscreteKeys& operator&(const DiscreteKeys& keys) {
+      this->insert(this->end(), keys.begin(), keys.end());
+      return *this;
+    }
+
     /// Print the keys and cardinalities.
     void print(const std::string& s = "",
                const KeyFormatter& keyFormatter = DefaultKeyFormatter) const;
@@ -79,6 +84,7 @@ namespace gtsam {
     /// Check equality to another DiscreteKeys object.
     bool equals(const DiscreteKeys& other, double tol = 0) const;
 
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
     /** Serialization function */
     friend class boost::serialization::access;
     template <class ARCHIVE>
@@ -87,6 +93,7 @@ namespace gtsam {
           "DiscreteKeys",
           boost::serialization::base_object<std::vector<DiscreteKey>>(*this));
     }
+#endif
 
   }; // DiscreteKeys
 

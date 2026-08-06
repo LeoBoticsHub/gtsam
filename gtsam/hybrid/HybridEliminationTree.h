@@ -35,29 +35,30 @@ class GTSAM_EXPORT HybridEliminationTree
 
  public:
   typedef EliminationTree<HybridBayesNet, HybridGaussianFactorGraph>
-      Base;                                    ///< Base class
-  typedef HybridEliminationTree This;          ///< This class
-  typedef boost::shared_ptr<This> shared_ptr;  ///< Shared pointer to this class
+      Base;                                  ///< Base class
+  typedef HybridEliminationTree This;        ///< This class
+  typedef std::shared_ptr<This> shared_ptr;  ///< Shared pointer to this class
 
   /// @name Constructors
   /// @{
 
   /**
-   * Build the elimination tree of a factor graph using pre-computed column
+   * Construct the elimination tree of a factor graph using pre-computed column
    * structure.
    * @param factorGraph The factor graph for which to build the elimination tree
    * @param structure The set of factors involving each variable.  If this is
    * not precomputed, you can call the Create(const FactorGraph<DERIVEDFACTOR>&)
    * named constructor instead.
-   * @return The elimination tree
+   * @param order The ordering of the variables.
    */
   HybridEliminationTree(const HybridGaussianFactorGraph& factorGraph,
                         const VariableIndex& structure, const Ordering& order);
 
-  /** Build the elimination tree of a factor graph.  Note that this has to
+  /** Construct the elimination tree of a factor graph.  Note that this has to
    * compute the column structure as a VariableIndex, so if you already have
    * this precomputed, use the other constructor instead.
    * @param factorGraph The factor graph for which to build the elimination tree
+   * @param order The ordering of the variables.
    */
   HybridEliminationTree(const HybridGaussianFactorGraph& factorGraph,
                         const Ordering& order);
